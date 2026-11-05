@@ -1,38 +1,55 @@
 # BIMSpend — AI Handoff
 
 Last updated: 2026-11-05
-Mode: **PLAN ONLY** — research, inspect, reason, and document. No implementation.
+Mode: **PLAN COMPLETE — AWAITING USER APPROVAL. BUILD BLOCKED.**
 
 ## Read in this order
+
 1. `CONTEXT_FOR_AI.md`
 2. `MASTER_PLAN.md`
 3. `TASK_TRACKER.md`
-4. `docs/technical-feasibility/miru-activitywatch-revit-candidate-assessment-2026-11-05.md`
+4. `AI_HANDOFF.md`
+5. `docs/technical-feasibility/miru-activitywatch-revit-candidate-assessment-2026-11-05.md`
+6. `docs/technical-feasibility/PLAN_AUDIT_REPORT.md`
 
-## Mission for next agent
-Determine how much of BIMSpend can be delivered by **reusing existing open-source software** rather than creating new code. Audit `https://github.com/saeloun/miru-web` and `https://github.com/ActivityWatch/activitywatch`; assess a read-only Revit connector. Provide an evidence-backed, scoped plan, **not a build**.
+## Completed work
 
-## Current known findings
-- Miru is a promising MIT-licensed administrative app for projects, team, time entries, invoices and reporting. Current code and dependencies have **not** been audited here.
-- ActivityWatch is an MPL-2.0 local-first tracker with active-window and AFK watchers; its data cannot be assumed to measure productive hours.
-- Combined integration, security, multi-tenancy, scalability and Revit project mapping **not yet proven**.
-- Designer should see only relevant own activity and timelog-assistance functions; manager has full management/finance capabilities. Exact permissions are unapproved design hypotheses.
-- Web manager dashboard with mobile responsive access; background Windows agent; optional Autodesk connector. No architecture approved.
-- Historical Revit Journals are diagnostic, not exact actual-hours data.
+P1-01 through P1-07 were completed as a static/research audit. The full evidence, reuse matrix, risk register, architecture, acceptance criteria and effort ranges are in `PLAN_AUDIT_REPORT.md`.
 
-## PLAN-mode deliverables
-- Pinned upstream revisions, component maps, license/dependency inventory.
-- Feature matrix READY / CONFIGURE / ADAPT / BUILD / UNKNOWN.
-- Specific APIs/events and expected integration boundaries, with source path references.
-- Risks: privacy/consent, workplace surveillance, tenant isolation, auth, dependency vulnerabilities, maintenance and distribution licensing.
-- Smallest reproducible prototype proposal and acceptance tests, with rough estimates explicitly marked estimates.
-- `docs/technical-feasibility/PLAN_AUDIT_REPORT.md`, tracker updates, and this handoff updated with evidence and unresolved issues.
+Pinned primary revisions:
+
+- Miru: `10e457e1d0cd2ac782be9d1edbcbd5a1a573486a` (`develop`)
+- ActivityWatch bundle: `9fee4702fea08dbe0149cc6e28f4ef66b49f54ec` (`master`)
+
+## Key findings
+
+1. Miru already exposes `POST /api/v1/agent/timesheet_entries` with bearer `AgentKey`, company/user binding, project scope, source/proof metadata, external run/session identifiers and pending review.
+2. Miru already provides companies, clients, projects, team membership, timesheets, bill states, invoices, reports, audit history and role policies. It is the strongest reuse base.
+3. Miru needs validation/adaptation for ingestion idempotency, agent rate limiting, device credential operation, exact manager role coverage, cross-tenant tests and BIMSpend financial/attribution semantics.
+4. ActivityWatch provides reusable local window and AFK heartbeats, local API/history and privacy filters. Keep it on loopback; do not use it as a cloud multi-tenant service.
+5. The smallest custom components are a local secure adapter/correlation queue and a read-only versioned Revit connector.
+6. Revit connector signals must be correlated outside Revit to avoid multiple-process/document double counting. Autodesk Idling is not a human-idle or productivity signal.
+7. Preferred pattern: **API/adapter first**, narrow Miru fork only if proven necessary; avoid modifying ActivityWatch covered files where possible.
+8. Manager-only finance/full reports and designer own-history/review remain the provisional role split.
+9. Observed activity, attributed/approved time, billed hours and loaded internal cost remain separate.
+
+## Validation boundary
+
+Static source and official-document research completed. The following remain **NÃO VALIDADO**: clean builds/tests, recursive ActivityWatch gitlink capture, transitive license/SBOM and CVE scans, Windows install/runtime/performance, live Revit and ACC identity, tenant-negative tests, penetration tests, backup/restore, legal compliance and production readiness.
+
+## Recommended next gate
+
+Await explicit user approval. If approved, execute only **Gate B2-A / B2-01** from the report (estimated 3–5 engineer-days):
+
+1. isolated checkouts at pinned SHAs;
+2. recursive submodule SHA capture;
+3. reproducible builds/tests;
+4. SBOM/license inventory;
+5. dependency/container security scans;
+6. evidence and stop/go report.
+
+Do not implement the adapter, Revit connector, Miru modifications, branding or product UI under B2-A.
 
 ## Prohibitions
-Do not implement, fork, install on user devices, deploy, edit FBT Revit Academy, modify BIMSpend product code, publish sensitive files, claim tests were run when they were not, or declare MVP approved. Do not auto-advance to BUILD. Ask the user for approval after PLAN report.
 
-## Token discipline
-Use repository search and narrow file reads, cache factual summaries in GitHub, avoid repeatedly ingesting entire repositories, use local automation/models for mechanical inspection, and report only decisions/evidence. When an agent ends, include next task ID and blockers.
-
-## Next action
-Start **P1-01** in PLAN mode. Save factual findings and stop before implementation.
+Do not auto-advance to BUILD. Do not install on the user's machine, deploy, use confidential data, modify product code, touch FBT Revit Academy, expose ActivityWatch remotely, or equate window focus with actual/billable work.
