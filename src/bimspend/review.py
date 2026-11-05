@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Any
 
 from bimspend.models import AttributedTime, Project, TimeEntry, TimeEntryState
+from bimspend.identity import require_actor, Role
 from bimspend.adapters.base import ReviewAdapter
 
 
@@ -65,6 +66,7 @@ def submit_entry(
     Transition: pending_review -> submitted.
     Does NOT change billed_minutes.
     """
+    require_actor(submitted_by, Role.DESIGNER, entry.user_id)
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.PENDING_REVIEW:
         raise ValueError(
@@ -94,6 +96,7 @@ def approve_entry(
     not automatically invoiced. Billing is a separate explicit action
     (bill_entry) to preserve the actual-vs-billed distinction.
     """
+    require_actor(reviewed_by, Role.MANAGER)
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.SUBMITTED:
         raise ValueError(
@@ -118,6 +121,12 @@ def reject_entry(
     Transition: submitted -> rejected (manager) or
     pending_review -> rejected (designer self-reject).
     """
+    if entry.state == TimeEntryState.SUBMITTED:
+        require_actor(reviewed_by, Role.MANAGER)
+    elif entry.state == TimeEntryState.PENDING_REVIEW:
+        require_actor(reviewed_by, Role.DESIGNER, entry.user_id)
+    else:
+        raise ValueError("Only pending or submitted entries can be rejected.")
     now = datetime.now().isoformat()
     entry.state = TimeEntryState.REJECTED
     entry.reviewed_by = reviewed_by
@@ -140,6 +149,7 @@ def bill_entry(
     may differ from hours invoiced to client). This is the realization
     gap that BIMSpend exists to expose.
     """
+    require_actor(reviewed_by, Role.MANAGER)
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.APPROVED:
         raise ValueError(
@@ -160,11 +170,13 @@ def bill_entry(
 
 def reset_to_pending(
     entry: TimeEntry,
+    actor_id: str,
 ) -> TimeEntry:
     """Reset a rejected entry back to pending_review for designer correction.
 
     Transition: rejected -> pending_review.
     """
+    require_actor(actor_id, Role.DESIGNER, entry.user_id)
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.REJECTED:
         raise ValueError(
@@ -175,6 +187,20 @@ def reset_to_pending(
     entry.reviewed_by = None
     entry.reviewed_at = None
     entry.review_notes = None
+    return entry
+
+
+def edit_entry(entry: TimeEntry, minutes: float, actor_id: str,
+               notes: str | None = None) -> TimeEntry:
+    """Edit a pending synthetic entry before submission."""
+    require_actor(actor_id, Role.DESIGNER, entry.user_id)
+    if entry.state != TimeEntryState.PENDING_REVIEW:
+        raise ValueError("Only pending entries can be edited.")
+    if not (0 < minutes <= 24 * 60):
+        raise ValueError("Minutes must be greater than zero and at most 24 hours.")
+    entry.minutes = minutes
+    if notes is not None:
+        entry.review_notes = notes
     return entry
 
 

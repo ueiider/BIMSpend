@@ -203,7 +203,7 @@ class TimesheetReviewScreen(BaseScreen):
         from bimspend.review import reset_to_pending
 
         try:
-            reset_to_pending(entry)
+            reset_to_pending(entry, self.current_user)
             self.app.db.upsert_time_entry(entry)
             self._refresh()
         except ValueError as exc:
