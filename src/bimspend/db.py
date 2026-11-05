@@ -50,8 +50,11 @@ class Database:
 
     def __init__(self, path: str = "bimspend.db"):
         self.path = path
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(path, timeout=5)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA busy_timeout = 5000")
+        if path != ":memory:":
+            self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA foreign_keys = ON")
         self._create_tables()
         self._migrate()
