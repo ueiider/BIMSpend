@@ -25,6 +25,9 @@ jobs:
       - name: Build executable folder
         shell: pwsh
         run: .\scripts\Package-BIMSpend.ps1
+      - name: Smoke test packaged executable with synthetic data
+        shell: pwsh
+        run: .\scripts\Smoke-Packaged-BIMSpend.ps1
       - name: Upload synthetic preview folder
         uses: actions/upload-artifact@v4
         with:
