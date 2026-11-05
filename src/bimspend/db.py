@@ -1,0 +1,340 @@
+"""SQLite persistence layer (stand-in for PostgreSQL).
+
+Provides a small, dependency-free data store for the vertical slice. All
+writes use parameterised queries. The activity_events table carries a
+UNIQUE(source, external_id) constraint to enforce idempotent ingestion.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+from typing import Any
+
+from .models import (
+    ActivityEvent,
+    AttributedTime,
+    Project,
+    TimeEntry,
+    TimeEntryState,
+)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class Database:
+    """SQLite-backed store for projects, activity events, attributed time
+    and time entries."""
+
+    def __init__(self, path: str = "bimspend.db"):
+        self.path = path
+        self.conn = sqlite3.connect(path)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self._create_tables()
+
+    def _create_tables(self) -> None:
+        self.conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                client TEXT NOT NULL,
+                standard_rate REAL NOT NULL,
+                loaded_cost_rate REAL NOT NULL,
+                is_billable INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS activity_events (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                app_name TEXT NOT NULL,
+                window_title TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT NOT NULL,
+                duration_minutes REAL NOT NULL,
+                is_afk INTEGER NOT NULL DEFAULT 0,
+                event_type TEXT NOT NULL,
+                raw_payload TEXT,
+                UNIQUE(source, external_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS attributed_time (
+                id TEXT PRIMARY KEY,
+                activity_event_id TEXT NOT NULL REFERENCES activity_events(id),
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                attributed_minutes REAL NOT NULL,
+                confidence REAL NOT NULL,
+                correlation_method TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS time_entries (
+                id TEXT PRIMARY KEY,
+                attributed_time_id TEXT NOT NULL REFERENCES attributed_time(id),
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                user_id TEXT NOT NULL,
+                minutes REAL NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending_review',
+                standard_rate REAL NOT NULL,
+                loaded_cost_rate REAL NOT NULL,
+                billed_minutes REAL NOT NULL DEFAULT 0,
+                review_notes TEXT,
+                reviewed_by TEXT,
+                reviewed_at TEXT,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Projects
+    # ------------------------------------------------------------------
+    def upsert_project(self, project: Project) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO projects (id, name, client, standard_rate,
+                                  loaded_cost_rate, is_billable, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                client=excluded.client,
+                standard_rate=excluded.standard_rate,
+                loaded_cost_rate=excluded.loaded_cost_rate,
+                is_billable=excluded.is_billable
+            """,
+            (
+                project.id,
+                project.name,
+                project.client,
+                project.standard_rate,
+                project.loaded_cost_rate,
+                1 if project.is_billable else 0,
+                project.created_at or _now_iso(),
+            ),
+        )
+        self.conn.commit()
+
+    def get_project(self, project_id: str) -> Project | None:
+        row = self.conn.execute(
+            "SELECT * FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+        return self._row_to_project(row) if row else None
+
+    def list_projects(self) -> list[Project]:
+        rows = self.conn.execute("SELECT * FROM projects ORDER BY name").fetchall()
+        return [self._row_to_project(r) for r in rows]
+
+    @staticmethod
+    def _row_to_project(row: sqlite3.Row) -> Project:
+        return Project(
+            id=row["id"],
+            name=row["name"],
+            client=row["client"],
+            standard_rate=row["standard_rate"],
+            loaded_cost_rate=row["loaded_cost_rate"],
+            is_billable=bool(row["is_billable"]),
+            created_at=row["created_at"],
+        )
+
+    # ------------------------------------------------------------------
+    # Activity events (idempotent ingestion via UNIQUE(source, external_id))
+    # ------------------------------------------------------------------
+    def ingest_event(self, event: ActivityEvent) -> bool:
+        """Insert an activity event. Returns False if a duplicate
+        (source, external_id) already exists — idempotent ingestion."""
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO activity_events
+                    (id, source, external_id, user_id, app_name, window_title,
+                     started_at, ended_at, duration_minutes, is_afk,
+                     event_type, raw_payload)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.id,
+                    event.source,
+                    event.external_id,
+                    event.user_id,
+                    event.app_name,
+                    event.window_title,
+                    event.started_at,
+                    event.ended_at,
+                    event.duration_minutes,
+                    1 if event.is_afk else 0,
+                    event.event_type,
+                    json.dumps(event.raw_payload) if event.raw_payload else None,
+                ),
+            )
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            # Duplicate (source, external_id) — ignore, idempotent.
+            return False
+
+    def list_events(self, user_id: str | None = None) -> list[ActivityEvent]:
+        if user_id:
+            rows = self.conn.execute(
+                "SELECT * FROM activity_events WHERE user_id = ? ORDER BY started_at",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM activity_events ORDER BY started_at"
+            ).fetchall()
+        return [self._row_to_event(r) for r in rows]
+
+    @staticmethod
+    def _row_to_event(row: sqlite3.Row) -> ActivityEvent:
+        return ActivityEvent(
+            id=row["id"],
+            source=row["source"],
+            external_id=row["external_id"],
+            user_id=row["user_id"],
+            app_name=row["app_name"],
+            window_title=row["window_title"],
+            started_at=row["started_at"],
+            ended_at=row["ended_at"],
+            duration_minutes=row["duration_minutes"],
+            is_afk=bool(row["is_afk"]),
+            event_type=row["event_type"],
+            raw_payload=json.loads(row["raw_payload"]) if row["raw_payload"] else None,
+        )
+
+    # ------------------------------------------------------------------
+    # Attributed time
+    # ------------------------------------------------------------------
+    def upsert_attributed_time(self, at: AttributedTime) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO attributed_time
+                (id, activity_event_id, project_id, attributed_minutes,
+                 confidence, correlation_method, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                activity_event_id=excluded.activity_event_id,
+                project_id=excluded.project_id,
+                attributed_minutes=excluded.attributed_minutes,
+                confidence=excluded.confidence,
+                correlation_method=excluded.correlation_method,
+                created_at=excluded.created_at
+            """,
+            (
+                at.id,
+                at.activity_event_id,
+                at.project_id,
+                at.attributed_minutes,
+                at.confidence,
+                at.correlation_method,
+                at.created_at or _now_iso(),
+            ),
+        )
+        self.conn.commit()
+
+    def list_attributed_time(self) -> list[AttributedTime]:
+        rows = self.conn.execute(
+            "SELECT * FROM attributed_time ORDER BY created_at"
+        ).fetchall()
+        return [self._row_to_attributed(r) for r in rows]
+
+    @staticmethod
+    def _row_to_attributed(row: sqlite3.Row) -> AttributedTime:
+        return AttributedTime(
+            id=row["id"],
+            activity_event_id=row["activity_event_id"],
+            project_id=row["project_id"],
+            attributed_minutes=row["attributed_minutes"],
+            confidence=row["confidence"],
+            correlation_method=row["correlation_method"],
+            created_at=row["created_at"],
+        )
+
+    # ------------------------------------------------------------------
+    # Time entries
+    # ------------------------------------------------------------------
+    def upsert_time_entry(self, entry: TimeEntry) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO time_entries
+                (id, attributed_time_id, project_id, user_id, minutes, state,
+                 standard_rate, loaded_cost_rate, billed_minutes,
+                 review_notes, reviewed_by, reviewed_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                attributed_time_id=excluded.attributed_time_id,
+                project_id=excluded.project_id,
+                user_id=excluded.user_id,
+                minutes=excluded.minutes,
+                state=excluded.state,
+                standard_rate=excluded.standard_rate,
+                loaded_cost_rate=excluded.loaded_cost_rate,
+                billed_minutes=excluded.billed_minutes,
+                review_notes=excluded.review_notes,
+                reviewed_by=excluded.reviewed_by,
+                reviewed_at=excluded.reviewed_at,
+                created_at=excluded.created_at
+            """,
+            (
+                entry.id,
+                entry.attributed_time_id,
+                entry.project_id,
+                entry.user_id,
+                entry.minutes,
+                entry.state.value,
+                entry.standard_rate,
+                entry.loaded_cost_rate,
+                entry.billed_minutes,
+                entry.review_notes,
+                entry.reviewed_by,
+                entry.reviewed_at,
+                entry.created_at or _now_iso(),
+            ),
+        )
+        self.conn.commit()
+
+    def get_time_entry(self, entry_id: str) -> TimeEntry | None:
+        row = self.conn.execute(
+            "SELECT * FROM time_entries WHERE id = ?", (entry_id,)
+        ).fetchone()
+        return self._row_to_entry(row) if row else None
+
+    def list_time_entries(self, state: TimeEntryState | None = None) -> list[TimeEntry]:
+        if state:
+            rows = self.conn.execute(
+                "SELECT * FROM time_entries WHERE state = ? ORDER BY created_at",
+                (state.value,),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM time_entries ORDER BY created_at"
+            ).fetchall()
+        return [self._row_to_entry(r) for r in rows]
+
+    @staticmethod
+    def _row_to_entry(row: sqlite3.Row) -> TimeEntry:
+        return TimeEntry(
+            id=row["id"],
+            attributed_time_id=row["attributed_time_id"],
+            project_id=row["project_id"],
+            user_id=row["user_id"],
+            minutes=row["minutes"],
+            state=TimeEntryState(row["state"]),
+            standard_rate=row["standard_rate"],
+            loaded_cost_rate=row["loaded_cost_rate"],
+            billed_minutes=row["billed_minutes"],
+            review_notes=row["review_notes"],
+            reviewed_by=row["reviewed_by"],
+            reviewed_at=row["reviewed_at"],
+            created_at=row["created_at"],
+        )
+
+    def close(self) -> None:
+        self.conn.close()

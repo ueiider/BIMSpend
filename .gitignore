@@ -9,6 +9,11 @@
 *.xls
 *.pdf
 journal*.txt
+*.db
+*.pyc
+__pycache__/
+*.egg-info/
+*.egg-link
 private/
 raw-data/
 secrets/
