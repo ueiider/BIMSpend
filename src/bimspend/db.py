@@ -31,6 +31,7 @@ from .models import (
     TeamMember,
     TimeEntry,
     TimeEntryState,
+    UserIdentityMap,
 )
 
 
@@ -70,9 +71,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 2:
+            if version is not None and version > 3:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 2")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 3")
         self._create_tables()
         self._migrate()
 
@@ -235,9 +236,11 @@ class Database:
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
+        # Ensure v1 is always recorded
         self.conn.execute("INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (?, ?)", (1, _now_iso()))
         self._commit()
-        if self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] < 2:
+        # v2 migration: archive columns, unique index, query indexes
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 2").fetchone():
             with self.transaction():
                 for table in ("attributed_time", "time_entries"):
                     cols = {row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -254,6 +257,52 @@ class Database:
                 self.conn.execute("CREATE INDEX IF NOT EXISTS ix_entry_project ON time_entries(project_id)")
                 self.conn.execute("CREATE INDEX IF NOT EXISTS ix_entry_user_state ON time_entries(user_id,state)")
                 self.conn.execute("INSERT INTO schema_version(version,applied_at) VALUES (2,?)", (_now_iso(),))
+        # v3 migration: user identity reconciliation table
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 3").fetchone():
+            with self.transaction():
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_identity_map (
+                        id TEXT PRIMARY KEY,
+                        historical_user_id TEXT NOT NULL UNIQUE,
+                        mapped_member_id TEXT REFERENCES team_members(id),
+                        mapping_status TEXT NOT NULL CHECK(mapping_status IN ('unresolved', 'mapped')),
+                        mapped_by TEXT,
+                        mapped_at TEXT,
+                        reason TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                existing_user_ids = [
+                    row[0]
+                    for row in self.conn.execute("SELECT DISTINCT user_id FROM time_entries").fetchall()
+                ]
+                member_ids = {
+                    row[0]
+                    for row in self.conn.execute("SELECT id FROM team_members").fetchall()
+                }
+                for uid in existing_user_ids:
+                    already = self.conn.execute(
+                        "SELECT 1 FROM user_identity_map WHERE historical_user_id = ?", (uid,)
+                    ).fetchone()
+                    if already:
+                        continue
+                    if uid in member_ids:
+                        self.conn.execute(
+                            """INSERT INTO user_identity_map
+                               (id, historical_user_id, mapped_member_id, mapping_status, mapped_by, mapped_at, reason, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (f"map_{uid}", uid, uid, "mapped", None, None, None, _now_iso()),
+                        )
+                    else:
+                        self.conn.execute(
+                            """INSERT INTO user_identity_map
+                               (id, historical_user_id, mapped_member_id, mapping_status, mapped_by, mapped_at, reason, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (f"map_{uid}", uid, None, "unresolved", None, None, None, _now_iso()),
+                        )
+                self.conn.execute("INSERT INTO schema_version(version,applied_at) VALUES (3,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -546,6 +595,130 @@ class Database:
                  entry.billed_minutes, _now_iso()),
             )
         self._commit()
+        # Register the entry's user_id in the identity map if not already present,
+        # so historical activity can be attributed to team members without losing
+        # the original identifier.
+        existing_map = self.conn.execute(
+            "SELECT 1 FROM user_identity_map WHERE historical_user_id = ?",
+            (entry.user_id,),
+        ).fetchone()
+        if not existing_map:
+            member_ids = {
+                row[0]
+                for row in self.conn.execute("SELECT id FROM team_members").fetchall()
+            }
+            if entry.user_id in member_ids:
+                self.conn.execute(
+                    """INSERT INTO user_identity_map
+                       (id, historical_user_id, mapped_member_id, mapping_status, mapped_by, mapped_at, reason, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"map_{entry.user_id}", entry.user_id, entry.user_id, "mapped",
+                     None, None, None, _now_iso()),
+                )
+            else:
+                self.conn.execute(
+                    """INSERT INTO user_identity_map
+                       (id, historical_user_id, mapped_member_id, mapping_status, mapped_by, mapped_at, reason, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (f"map_{entry.user_id}", entry.user_id, None, "unresolved",
+                     None, None, None, _now_iso()),
+                )
+            self._commit()
+
+    # ------------------------------------------------------------------
+    # User identity reconciliation
+    # ------------------------------------------------------------------
+    def resolve_user_id(self, user_id: str) -> str | None:
+        """Resolve a historical user_id to a team_member id, or None if unresolved."""
+        row = self.conn.execute(
+            "SELECT mapped_member_id FROM user_identity_map "
+            "WHERE historical_user_id = ? AND mapping_status = 'mapped'",
+            (user_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def list_unresolved_user_ids(self) -> list[str]:
+        """Return user_ids that have no team_member mapping."""
+        return [
+            row[0]
+            for row in self.conn.execute(
+                "SELECT historical_user_id FROM user_identity_map WHERE mapping_status = 'unresolved'"
+            ).fetchall()
+        ]
+
+    def get_user_identity_maps(self) -> list[UserIdentityMap]:
+        """Return all user identity mappings."""
+        rows = self.conn.execute(
+            "SELECT * FROM user_identity_map ORDER BY historical_user_id"
+        ).fetchall()
+        return [self._row_to_user_identity_map(r) for r in rows]
+
+    def map_user_id(
+        self,
+        historical_user_id: str,
+        member_id: str,
+        mapped_by: str,
+        reason: str,
+    ) -> None:
+        """Authorized mapping of a historical user_id to a team_member."""
+        member = self.conn.execute(
+            "SELECT 1 FROM team_members WHERE id = ?", (member_id,)
+        ).fetchone()
+        if member is None:
+            raise ValueError(f"Unknown team member id: {member_id}")
+        existing = self.conn.execute(
+            "SELECT 1 FROM user_identity_map WHERE historical_user_id = ?",
+            (historical_user_id,),
+        ).fetchone()
+        if existing:
+            self.conn.execute(
+                """UPDATE user_identity_map
+                   SET mapped_member_id = ?, mapping_status = 'mapped', mapped_by = ?,
+                       mapped_at = ?, reason = ?
+                   WHERE historical_user_id = ?""",
+                (member_id, mapped_by, _now_iso(), reason, historical_user_id),
+            )
+        else:
+            self.conn.execute(
+                """INSERT INTO user_identity_map
+                   (id, historical_user_id, mapped_member_id, mapping_status, mapped_by, mapped_at, reason, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    f"map_{historical_user_id}",
+                    historical_user_id,
+                    member_id,
+                    "mapped",
+                    mapped_by,
+                    _now_iso(),
+                    reason,
+                    _now_iso(),
+                ),
+            )
+        self._commit()
+
+    def unmap_user_id(self, historical_user_id: str, mapped_by: str, reason: str) -> None:
+        """Unmap a historical user_id, returning it to unresolved status."""
+        self.conn.execute(
+            """UPDATE user_identity_map
+               SET mapped_member_id = NULL, mapping_status = 'unresolved', mapped_by = ?,
+                   mapped_at = ?, reason = ?
+               WHERE historical_user_id = ?""",
+            (mapped_by, _now_iso(), reason, historical_user_id),
+        )
+        self._commit()
+
+    @staticmethod
+    def _row_to_user_identity_map(row: sqlite3.Row) -> UserIdentityMap:
+        return UserIdentityMap(
+            id=row["id"],
+            historical_user_id=row["historical_user_id"],
+            mapped_member_id=row["mapped_member_id"],
+            mapping_status=row["mapping_status"],
+            mapped_by=row["mapped_by"],
+            mapped_at=row["mapped_at"],
+            reason=row["reason"],
+            created_at=row["created_at"],
+        )
 
     def list_entry_history(self, entry_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(

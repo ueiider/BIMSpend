@@ -283,3 +283,35 @@ class TeamMember:
     role: str
     loaded_cost_rate: float
     is_active: bool = True
+
+
+@dataclass
+class UserIdentityMap:
+    """Maps historical user_id values from time_entries to team_members.
+
+    Preserves original user IDs while allowing authorized, auditable
+    mapping to authenticated team member accounts. Unmapped identities
+    are tracked separately so historical records are never orphaned
+    or silently reassigned.
+    """
+
+    id: str
+    historical_user_id: str
+    mapped_member_id: str | None  # None = unresolved
+    mapping_status: str  # "unresolved" or "mapped"
+    mapped_by: str | None
+    mapped_at: str | None
+    reason: str | None
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "historical_user_id": self.historical_user_id,
+            "mapped_member_id": self.mapped_member_id,
+            "mapping_status": self.mapping_status,
+            "mapped_by": self.mapped_by,
+            "mapped_at": self.mapped_at,
+            "reason": self.reason,
+            "created_at": self.created_at,
+        }
