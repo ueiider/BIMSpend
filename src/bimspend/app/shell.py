@@ -146,6 +146,7 @@ class BIMSpendApp:
             ("timesheet_review", "Timesheet Review", "Timesheet Review"),
             ("team", "Team", "Team"),
             ("reports", "Reports", "Reports"),
+            ("estimating", "Historical Estimating", "Historical Estimating"),
         ]
 
         for screen_id, label, _ in nav_items:
@@ -296,6 +297,9 @@ class BIMSpendApp:
         if screen_id == "reports":
             from .screens.reports import ReportsScreen
             return ReportsScreen(self.screen_container, self)
+        if screen_id == "estimating":
+            from .screens.estimating import EstimatingScreen
+            return EstimatingScreen(self.screen_container, self)
         raise ValueError(f"Unknown screen: {screen_id}")
 
     def set_project(self, project: Project | None) -> None:
