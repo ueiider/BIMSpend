@@ -1,0 +1,14 @@
+scenario,metric,value,unit,note
+billing_discount,actual_hours,12,h,Synthetic
+billing_discount,billed_hours,8,h,Synthetic
+billing_discount,charge_rate,110,AUD/h,Synthetic
+billing_discount,invoiced,880,AUD,Synthetic
+billing_discount,unbilled_reference,440,AUD,Not accounting loss
+project_cost,fee,18000,AUD,Synthetic
+project_cost,actual_hours,160,h,Synthetic
+project_cost,internal_hourly_cost,65,AUD/h,Synthetic
+project_cost,labor_cost,10400,AUD,Synthetic
+quote,floors,12,count,Synthetic
+quote,hours_per_floor,18,h,Synthetic
+quote,contingency,15,percent,Synthetic
+quote,target_margin,30,percent,Synthetic

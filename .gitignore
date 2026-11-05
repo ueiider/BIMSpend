@@ -1,0 +1,15 @@
+# Never commit confidential operational data
+*.rvt
+*.rfa
+*.rte
+*.nwd
+*.nwc
+*.dwg
+*.xlsx
+*.xls
+*.pdf
+journal*.txt
+private/
+raw-data/
+secrets/
+.env*
