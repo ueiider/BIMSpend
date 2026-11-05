@@ -195,6 +195,7 @@ class Database:
         )
         self.conn.commit()
 
+    @atomic_write
     def _migrate(self) -> None:
         """Apply schema migrations for existing databases.
 
@@ -235,7 +236,7 @@ class Database:
             "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         self.conn.execute("INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (?, ?)", (1, _now_iso()))
-        self.conn.commit()
+        self._commit()
         if self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] < 2:
             with self.transaction():
                 for table in ("attributed_time", "time_entries"):
