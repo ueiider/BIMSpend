@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimspend.example.com/schemas/window_focus_changed.schema.json",
+  "title": "Window Focus Changed Event",
+  "allOf": [
+    { "$ref": "envelope.schema.json" },
+    {
+      "type": "object",
+      "required": ["event_type", "schema_version", "payload"],
+      "properties": {
+        "event_type": { "const": "window.focus.changed" },
+        "schema_version": { "const": "1.0.0" },
+        "payload": {
+          "type": "object",
+          "required": ["previous", "current", "transition_type", "idle_state"],
+          "additionalProperties": false,
+          "properties": {
+            "previous": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "app_name": { "type": ["string", "null"] },
+                "window_title": { "type": ["string", "null"] },
+                "process_id": { "type": ["integer", "null"], "minimum": 0 },
+                "exe_path": { "type": ["string", "null"] }
+              }
+            },
+            "current": {
+              "type": "object",
+              "required": ["app_name", "window_title", "process_id", "exe_path"],
+              "additionalProperties": false,
+              "properties": {
+                "app_name": { "type": "string", "minLength": 1 },
+                "window_title": { "type": "string" },
+                "process_id": { "type": "integer", "minimum": 0 },
+                "exe_path": { "type": "string", "minLength": 1 }
+              }
+            },
+            "transition_type": {
+              "type": "string",
+              "enum": ["foreground_gained", "foreground_lost", "app_switch", "title_change"]
+            },
+            "idle_state": {
+              "type": "string",
+              "enum": ["active", "idle", "away"]
+            },
+            "monitor_info": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "monitor_count": { "type": "integer", "minimum": 1 },
+                "primary_monitor": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+# ActivityWatch Adapter Configuration
+aw_server_url: "http://localhost:5600"
+poll_interval_seconds: 5
+event_types:
+  - "window.focus.changed"
+  - "afk.state.changed"
+output: "local_queue"  # or "stdout" for testing
+instance_id: ""  # Generated on first run (UUID v4)
+
+# Queue settings (shared with Windows Adapter)
+queue:
+  path: "data/bimspend_queue.db"
+  max_entries: 10000
+  max_age_days: 7
+
+# Privacy filter
+privacy:
+  enabled: true
+  allowlist_patterns: []  # Known project prefixes
+  denylist_patterns:
+    - "password"
+    - "secret"
+    - "token"
+    - "api_key"
+    - "credential"
+    - "private"
+    - "confidential"

@@ -1,0 +1,38 @@
+{
+  "event_id": "60702c2f-7159-4320-81f8-7d4fae212abc",
+  "event_type": "window.focus.changed",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T12:34:56.789Z",
+  "source": {
+    "component": "aw-adapter",
+    "version": "1.0.0",
+    "instance_id": "805d1c82-1724-4b81-bb21-eaf6a7a51e08",
+    "process_id": 12345
+  },
+  "correlation": {
+    "session_id": "57aba55c-8ac1-459d-b212-a56292572bcd",
+    "run_id": "de31dad4-3cfe-41b4-9f9b-15cbaf26f9a0",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "previous": {
+      "app_name": "explorer.exe",
+      "window_title": "File Explorer",
+      "process_id": 1234,
+      "exe_path": "C:\\Windows\\explorer.exe"
+    },
+    "current": {
+      "app_name": "Revit.exe",
+      "window_title": "Project_A.rvt - Autodesk Revit 2025",
+      "process_id": 8842,
+      "exe_path": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+    },
+    "transition_type": "app_switch",
+    "idle_state": "active",
+    "monitor_info": {
+      "monitor_count": 2,
+      "primary_monitor": 0
+    }
+  }
+}

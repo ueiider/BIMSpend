@@ -1,0 +1,32 @@
+{
+  "mappings": [
+    {
+      "mapping_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "project_id": "11111111-2222-3333-4444-555555555555",
+      "project_name": "Project Alpha",
+      "model_identity": {
+        "type": "workshared_central",
+        "central_path": "\\\\SERVER\\CENTRAL\\PROJECT_A_CENTRAL.RVT",
+        "central_guid": "11111111-2222-3333-4444-555555555555",
+        "document_title": "Project_A.rvt"
+      },
+      "created_by": "admin@company.com",
+      "created_utc": "2026-11-01T00:00:00Z",
+      "is_active": true
+    },
+    {
+      "mapping_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "project_id": "22222222-3333-4444-5555-666666666666",
+      "project_name": "Project Beta",
+      "model_identity": {
+        "type": "workshared_central",
+        "central_path": "\\\\SERVER\\CENTRAL\\PROJECT_B_CENTRAL.RVT",
+        "central_guid": "22222222-3333-4444-5555-666666666666",
+        "document_title": "Project_B.rvt"
+      },
+      "created_by": "admin@company.com",
+      "created_utc": "2026-11-01T00:00:00Z",
+      "is_active": true
+    }
+  ]
+}

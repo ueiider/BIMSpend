@@ -1,0 +1,63 @@
+{
+  "event_id": "2c258c02-a543-47e2-9a89-ee0a79833fb7",
+  "event_type": "adapter.ingestion.draft",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T14:05:00.000Z",
+  "source": {
+    "component": "windows-adapter",
+    "version": "1.0.0",
+    "instance_id": "db1295ab-7fe3-4114-a12c-8d204df4f540",
+    "process_id": 15000
+  },
+  "correlation": {
+    "session_id": "43a388d5-e274-4250-a2cd-aa5475f618ca",
+    "run_id": "58e75642-6d42-4d13-b4dc-d10d346a4eab",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "timesheet_entry": {
+      "external_run_id": "ext-run-123",
+      "external_session_id": "ext-session-456",
+      "duration_minutes": 25,
+      "work_date": "2026-11-05",
+      "project_id": "2046b369-2391-44c0-8279-943754c70770",
+      "source": "automation",
+      "note": "Correlated Revit activity: Project_A.rvt (Level 1, 3D View). Confidence: 0.92. Observed: 27min, Active: 25min, AFK excluded: 2min.",
+      "proof_url": "https://bimspend.example.com/evidence/ext-run-123",
+      "source_metadata": {
+        "correlation_confidence": 0.92,
+        "observed_seconds": 1620,
+        "active_seconds": 1500,
+        "afk_seconds": 120,
+        "evidence_event_ids": [
+          "60702c2f-7159-4320-81f8-7d4fae212abc",
+          "7ca528de-dc28-4869-b78a-b6229b7bded8"
+        ],
+        "model_identity": {
+          "type": "workshared_central",
+          "central_path": "\\\\\\\\server\\\\central\\\\Project_A_Central.rvt",
+          "central_guid": "15d2ece5-f072-4547-9ea9-28789e44256f"
+        },
+        "attribution_factors": {
+          "revit_foreground": true,
+          "document_match": true,
+          "view_active": true,
+          "afk_excluded": true,
+          "single_revit_process": true
+        }
+      },
+      "proof_metadata": {
+        "window_events": 45,
+        "afk_events": 3,
+        "revit_idling_events": 180,
+        "correlation_algorithm": "v1.0",
+        "privacy_filter_applied": true
+      }
+    },
+    "agent": {
+      "agent_key_id": "agent-key-123",
+      "company_id": "fd0397f1-e760-402a-b359-a7e75bc21813"
+    }
+  }
+}

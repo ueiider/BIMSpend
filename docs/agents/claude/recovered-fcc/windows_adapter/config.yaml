@@ -1,0 +1,52 @@
+# Windows Adapter Configuration
+instance_id: ""  # Generated on first run (UUID v4)
+agent_key: ""    # From environment variable MIRU_AGENT_KEY
+miru_base_url: "https://miru.company.com"
+company_id: ""   # From environment variable MIRU_COMPANY_ID
+
+queue:
+  path: "data/bimspend_queue.db"
+  max_entries: 10000
+  max_age_days: 7
+
+correlation:
+  interval_minutes: 30
+  confidence_weights:
+    revit_foreground: 0.25
+    document_match: 0.25
+    view_active: 0.15
+    afk_excluded: 0.20
+    single_revit_process: 0.15
+  confidence_thresholds:
+    high: 0.80
+    medium: 0.50
+    low: 0.00
+
+submission:
+  batch_size: 50
+  interval_seconds: 30
+  timeout_seconds: 30
+  max_retries: 5
+
+identity:
+  admin_mappings_path: "config/admin_mappings.json"
+  acc_credentials: "from_env"
+
+# Revit Connector transport
+revit_transport:
+  type: "dropzone"  # or "named_pipe"
+  dropzone_path: "C:/ProgramData/BIMSpend/dropzone"
+  named_pipe_name: "\\\\.\\pipe\\bimspend_revit_events"
+
+# Privacy filter
+privacy:
+  enabled: true
+  allowlist_patterns: []
+  denylist_patterns:
+    - "password"
+    - "secret"
+    - "token"
+    - "api_key"
+    - "credential"
+    - "private"
+    - "confidential"

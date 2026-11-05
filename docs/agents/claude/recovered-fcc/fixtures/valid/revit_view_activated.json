@@ -1,0 +1,31 @@
+{
+  "event_id": "bc11fb31-eac7-415c-9914-6d17b0b376fc",
+  "event_type": "revit.view.activated",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T13:00:00.000Z",
+  "source": {
+    "component": "revit-connector",
+    "version": "1.0.0",
+    "instance_id": "407f014c-3855-43f2-b874-dc4eed836618",
+    "process_id": 8842
+  },
+  "correlation": {
+    "session_id": "597b5220-ea4f-46e5-8c4f-002f57bb6088",
+    "run_id": "ff2bca82-ced8-4e49-b421-ff2fa3988b3c",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "document_id": "a6487663-26cd-4a04-b937-48e9ac9e83c7",
+    "previous_view": {
+      "view_id": 1001,
+      "view_name": "Level 1 - Floor Plan",
+      "view_type": "FloorPlan"
+    },
+    "current_view": {
+      "view_id": 1002,
+      "view_name": "3D View",
+      "view_type": "ThreeD"
+    }
+  }
+}

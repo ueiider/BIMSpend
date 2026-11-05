@@ -1,0 +1,24 @@
+{
+  "event_id": "7ca528de-dc28-4869-b78a-b6229b7bded8",
+  "event_type": "afk.state.changed",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T12:35:00.000Z",
+  "source": {
+    "component": "aw-adapter",
+    "version": "1.0.0",
+    "instance_id": "805d1c82-1724-4b81-bb21-eaf6a7a51e08",
+    "process_id": 12345
+  },
+  "correlation": {
+    "session_id": "57aba55c-8ac1-459d-b212-a56292572bcd",
+    "run_id": "de31dad4-3cfe-41b4-9f9b-15cbaf26f9a0",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "state": "afk",
+    "idle_duration_seconds": 300,
+    "trigger": "timeout",
+    "previous_state": "not_afk"
+  }
+}

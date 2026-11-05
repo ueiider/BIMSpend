@@ -1,0 +1,33 @@
+{
+  "event_id": "7e4683fe-2013-43a2-8981-8c84ff05b980",
+  "event_type": "revit.document.closed",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T15:30:00.000Z",
+  "source": {
+    "component": "revit-connector",
+    "version": "1.0.0",
+    "instance_id": "407f014c-3855-43f2-b874-dc4eed836618",
+    "process_id": 8842
+  },
+  "correlation": {
+    "session_id": "597b5220-ea4f-46e5-8c4f-002f57bb6088",
+    "run_id": "ff2bca82-ced8-4e49-b421-ff2fa3988b3c",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "document_id": "a6487663-26cd-4a04-b937-48e9ac9e83c7",
+    "title": "Project_A.rvt",
+    "close_reason": "save_and_close",
+    "was_modified": true,
+    "last_view": {
+      "view_id": 1002,
+      "view_name": "3D View"
+    },
+    "session_duration_seconds": 10800,
+    "process": {
+      "process_id": 8842,
+      "session_id": "597b5220-ea4f-46e5-8c4f-002f57bb6088"
+    }
+  }
+}

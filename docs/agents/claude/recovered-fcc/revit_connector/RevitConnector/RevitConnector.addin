@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>BIMSpend Revit Connector</Name>
+    <Assembly>RevitConnector.dll</Assembly>
+    <AddInId>a1b2c3d4-e5f6-7890-abcd-ef1234567890</AddInId>
+    <FullClassName>RevitConnector.Addin</FullClassName>
+    <VendorId>BIMSpend</VendorId>
+    <VendorDescription>BIMSpend Read-Only Connector for Time Tracking</VendorDescription>
+  </AddIn>
+</RevitAddIns>

@@ -1,0 +1,60 @@
+{
+  "event_id": "6011ffeb-b220-4b9d-9212-01686570e3f2",
+  "event_type": "adapter.correlated.activity",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T14:00:00.000Z",
+  "source": {
+    "component": "windows-adapter",
+    "version": "1.0.0",
+    "instance_id": "db1295ab-7fe3-4114-a12c-8d204df4f540",
+    "process_id": 15000
+  },
+  "correlation": {
+    "session_id": "43a388d5-e274-4250-a2cd-aa5475f618ca",
+    "run_id": "58e75642-6d42-4d13-b4dc-d10d346a4eab",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "interval": {
+      "start_utc": "2026-11-05T12:00:00.000Z",
+      "end_utc": "2026-11-05T12:30:00.000Z",
+      "duration_seconds": 1800
+    },
+    "attribution": {
+      "project_id": "2046b369-2391-44c0-8279-943754c70770",
+      "project_name": "Project Alpha",
+      "model_identity": {
+        "type": "workshared_central",
+        "central_path": "\\\\\\\\server\\\\central\\\\Project_A_Central.rvt",
+        "central_guid": "15d2ece5-f072-4547-9ea9-28789e44256f",
+        "document_title": "Project_A.rvt"
+      },
+      "confidence": 0.92,
+      "confidence_factors": {
+        "revit_foreground": true,
+        "document_match": true,
+        "view_active": true,
+        "afk_excluded": true,
+        "single_revit_process": true
+      }
+    },
+    "activity": {
+      "observed_seconds": 1620,
+      "active_seconds": 1500,
+      "afk_seconds": 120,
+      "idle_seconds": 180,
+      "revit_foreground_seconds": 1450,
+      "other_app_seconds": 170
+    },
+    "evidence": {
+      "window_events_count": 45,
+      "afk_events_count": 3,
+      "revit_idling_events_count": 180,
+      "source_event_ids": [
+        "60702c2f-7159-4320-81f8-7d4fae212abc",
+        "7ca528de-dc28-4869-b78a-b6229b7bded8"
+      ]
+    }
+  }
+}

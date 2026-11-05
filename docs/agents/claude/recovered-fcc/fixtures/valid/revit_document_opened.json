@@ -1,0 +1,44 @@
+{
+  "event_id": "39f07665-758b-4863-989a-7dac91066ec7",
+  "event_type": "revit.document.opened",
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-11-05T12:36:00.000Z",
+  "source": {
+    "component": "revit-connector",
+    "version": "1.0.0",
+    "instance_id": "407f014c-3855-43f2-b874-dc4eed836618",
+    "process_id": 8842
+  },
+  "correlation": {
+    "session_id": "597b5220-ea4f-46e5-8c4f-002f57bb6088",
+    "run_id": "ff2bca82-ced8-4e49-b421-ff2fa3988b3c",
+    "external_run_id": "ext-run-123",
+    "external_session_id": "ext-session-456"
+  },
+  "payload": {
+    "document": {
+      "document_id": "a6487663-26cd-4a04-b937-48e9ac9e83c7",
+      "title": "Project_A.rvt",
+      "path": "\\\\\\\\server\\\\central\\\\Project_A_Central.rvt",
+      "is_workshared": true,
+      "central_path": "\\\\\\\\server\\\\central\\\\Project_A_Central.rvt",
+      "central_guid": "15d2ece5-f072-4547-9ea9-28789e44256f",
+      "version_number": 42,
+      "last_saved_by": "designer@company.com",
+      "last_saved_utc": "2026-11-04T17:00:00Z",
+      "is_detached": false,
+      "is_new": false
+    },
+    "view": {
+      "view_id": 1001,
+      "view_name": "Level 1 - Floor Plan",
+      "view_type": "FloorPlan"
+    },
+    "process": {
+      "process_id": 8842,
+      "session_id": "597b5220-ea4f-46e5-8c4f-002f57bb6088",
+      "revit_version": "2025.2",
+      "dotnet_runtime": ".NET 8.0"
+    }
+  }
+}
