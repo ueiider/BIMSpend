@@ -1,7 +1,7 @@
 # BIMSpend — Master Plan
 
 Updated: 2026-11-05
-State: **PLAN / discovery only**. No implementation authorized.
+State: **BUILD 01 AUTHORIZED (2026-11-05).** Owner explicitly authorized initial vertical-slice development. Independent B2-A audit deferred, not passed.
 
 ## North star
 Create a commercial, low-friction project time-and-cost intelligence product by **reusing proven existing software**, not recreating it. Preserve distinct metrics for observed activity, verified project hours, billed hours, and loaded internal cost.
@@ -33,11 +33,11 @@ Create plan, tracker, handoff, and source assessment. No application code.
 8. Produce a **small, staged build proposal** with rough effort, evidence and stop/go recommendation.
 **Deliverable:** `docs/technical-feasibility/PLAN_AUDIT_REPORT.md` and proposed build tasks. **Gate:** user reviews and explicitly approves first build task.
 
-### Phase 2 — BUILD: isolated baseline execution [BLOCKED]
-After approval only: clone at pinned SHAs into isolated workspace, run documented build/tests, capture reproducible evidence. Do not fork/rebrand or change production repositories without approval.
+### Phase 2 — BUILD: isolated baseline execution [AUTHORIZED — BUILD 01]
+Owner authorized 2026-11-05. Independent B2-A audit deferred, not passed. Vertical slice uses synthetic data and adapter interfaces. See build/opencode-bimspend-foundation branch.
 
-### Phase 3 — BUILD: minimal event-to-project proof of concept [BLOCKED]
-After separate approval: use synthetic/test-user data to prove Windows activity event -> safe ingestion -> project attribution -> manager view, preserving uncertainty and billed-hour separation.
+### Phase 3 — BUILD: minimal event-to-project proof of concept [AUTHORIZED — BUILD 01]
+Owner authorized 2026-11-05. Uses synthetic/test-user data to prove activity event -> ingestion -> project attribution -> manager view, preserving uncertainty and billed-hour separation.
 
 ### Phase 4 — Product scope / security / pilot [BLOCKED]
 Only after demonstrated feasibility: agree MVP, data governance, workplace-surveillance legal review, security tests, pilot and commercial terms.
