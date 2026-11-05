@@ -24,6 +24,7 @@ from .models import (
     ActivityEvent,
     AttributedTime,
     Project,
+    TeamMember,
     TimeEntry,
     TimeEntryState,
 )
@@ -66,6 +67,20 @@ class Database:
                 is_billable INTEGER NOT NULL DEFAULT 1,
                 is_archived INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS team_members (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('designer', 'manager')),
+                loaded_cost_rate REAL NOT NULL CHECK(loaded_cost_rate >= 0),
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS project_assignments (
+                member_id TEXT NOT NULL REFERENCES team_members(id),
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                PRIMARY KEY (member_id, project_id)
             );
 
             CREATE TABLE IF NOT EXISTS activity_events (
@@ -216,6 +231,47 @@ class Database:
             is_archived=bool(row["is_archived"]),
             created_at=row["created_at"],
         )
+
+    # ------------------------------------------------------------------
+    # Local team roster and project assignments
+    # ------------------------------------------------------------------
+    def upsert_member(self, member: TeamMember) -> None:
+        if not member.id.strip() or not member.name.strip():
+            raise ValueError("Member ID and name are required.")
+        if member.role not in ("designer", "manager") or member.loaded_cost_rate < 0:
+            raise ValueError("Invalid role or hourly cost.")
+        self.conn.execute(
+            """INSERT INTO team_members (id, name, role, loaded_cost_rate, is_active)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role,
+                   loaded_cost_rate=excluded.loaded_cost_rate,
+                   is_active=excluded.is_active""",
+            (member.id, member.name, member.role, member.loaded_cost_rate,
+             int(member.is_active)),
+        )
+        self.conn.commit()
+
+    def list_members(self) -> list[TeamMember]:
+        return [TeamMember(r["id"], r["name"], r["role"], r["loaded_cost_rate"],
+                           bool(r["is_active"])) for r in
+                self.conn.execute("SELECT * FROM team_members ORDER BY name").fetchall()]
+
+    def assign_member(self, member_id: str, project_id: str) -> None:
+        member = next((m for m in self.list_members() if m.id == member_id), None)
+        project = self.get_project(project_id)
+        if member is None or not member.is_active or project is None or project.is_archived:
+            raise ValueError("Assignment requires an active member and project.")
+        self.conn.execute(
+            "INSERT OR IGNORE INTO project_assignments(member_id,project_id) VALUES (?,?)",
+            (member_id, project_id),
+        )
+        self.conn.commit()
+
+    def list_assignments(self, member_id: str) -> list[str]:
+        return [r["project_id"] for r in self.conn.execute(
+            "SELECT project_id FROM project_assignments WHERE member_id = ? ORDER BY project_id",
+            (member_id,),
+        ).fetchall()]
 
     # ------------------------------------------------------------------
     # Activity events (idempotent ingestion via UNIQUE(source, external_id))

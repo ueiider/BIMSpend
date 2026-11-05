@@ -144,6 +144,7 @@ class BIMSpendApp:
             ("project_detail", "Project Detail", "Project Details"),
             ("activity_timeline", "Activity Timeline", "Activity Timeline"),
             ("timesheet_review", "Timesheet Review", "Timesheet Review"),
+            ("team", "Team", "Team"),
         ]
 
         for screen_id, label, _ in nav_items:
@@ -288,6 +289,9 @@ class BIMSpendApp:
         if screen_id == "timesheet_review":
             from .screens.timesheet_review import TimesheetReviewScreen
             return TimesheetReviewScreen(self.screen_container, self)
+        if screen_id == "team":
+            from .screens.team import TeamScreen
+            return TeamScreen(self.screen_container, self)
         raise ValueError(f"Unknown screen: {screen_id}")
 
     def set_project(self, project: Project | None) -> None:

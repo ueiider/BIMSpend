@@ -267,3 +267,14 @@ class TimeEntry:
     @property
     def is_rejected(self) -> bool:
         return self.state == TimeEntryState.REJECTED
+
+
+
+@dataclass
+class TeamMember:
+    """Local synthetic roster, separate from authenticated identity."""
+    id: str
+    name: str
+    role: str
+    loaded_cost_rate: float
+    is_active: bool = True
