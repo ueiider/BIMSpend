@@ -117,3 +117,11 @@ User-stated preferences (not technical approvals): commercial subscription desir
 ## 11. Update protocol
 
 After each discussion, update relevant docs, append a dated note to `docs/decisions/decision-log.md` (format: `YYYY-MM-DD | Idea / Hypothesis / Tested / Approved | Topic | Evidence | Decision / Next action`), and optionally open a GitHub Issue. Keep changes in GitHub private until cleared for publication. Never label a decision APPROVED unless the user explicitly approved it.
+
+## 12. New research — reuse of existing GitHub code (2026-11-05)
+
+The user liked the Miru dashboard and asked whether existing open-source software could be copied and adapted for BIMSpend. **Miru is the leading candidate for administrative functionality**, **ActivityWatch for Windows active-window/idle observation**, and a **custom read-only Revit connector** for document/project signals. A responsive manager web/mobile dashboard is a desired hypothesis, possibly a PWA. These are **candidates, not selected or implemented architecture**.
+
+Preliminary legal/technical conclusion: **YES to evaluating and prototyping** Miru (MIT) and ActivityWatch (MPL-2.0), observing their license terms; **NO production readiness or combined-stack compatibility has been established**. GPL/AGPL competitors are useful references but require separate licensing review if incorporated. No code checkout, runtime integration, dependency/security audit, or live Revit test has occurred in this chat. Do not claim otherwise.
+
+Read the complete assessment, risks, open questions, and mandatory validation checklist in `docs/technical-feasibility/miru-activitywatch-revit-candidate-assessment-2026-11-05.md`. Keep billed hours distinct from observed/actual hours and internal loaded costs. No product MVP approved. The user requested that these findings be committed to GitHub.
