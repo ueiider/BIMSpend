@@ -1,6 +1,8 @@
 import sqlite3
 import builtins
 import pytest
+import threading
+import time
 
 from bimspend.db import Database
 from bimspend.models import Project
@@ -61,3 +63,44 @@ def test_version_tracking_preserves_legacy_project(tmp_path):
         assert reopened.get_project("old").name == "Legacy"
     finally:
         reopened.close()
+
+
+def test_nested_transaction_rolls_back_all_writes(tmp_path):
+    db = Database(str(tmp_path / "atomic.db"))
+    with pytest.raises(sqlite3.IntegrityError):
+        with db.transaction():
+            db.upsert_project(Project("first", "First", "Synthetic", 100, 50))
+            db.upsert_project(Project("invalid", "Bad", None, 100, 50))
+    assert db.list_projects() == []
+    db.upsert_project(Project("after", "After", "Synthetic", 100, 50))
+    assert [p.id for p in db.list_projects()] == ["after"]
+    db.close()
+
+
+def test_writer_waits_for_real_sqlite_lock_then_succeeds(tmp_path):
+    path = str(tmp_path / "locked.db")
+    first = Database(path)
+    started = threading.Event()
+    outcome = []
+
+    def writer():
+        started.set()
+        second = Database(path)
+        try:
+            second.upsert_project(Project("second", "Second", "Synthetic", 100, 50))
+            outcome.append("committed")
+        finally:
+            second.close()
+
+    with first.transaction():
+        first.upsert_project(Project("first", "First", "Synthetic", 100, 50))
+        thread = threading.Thread(target=writer)
+        thread.start()
+        assert started.wait(2)
+        time.sleep(0.15)
+        assert not outcome
+    thread.join(timeout=3)
+    assert not thread.is_alive()
+    assert outcome == ["committed"]
+    assert {p.id for p in first.list_projects()} == {"first", "second"}
+    first.close()

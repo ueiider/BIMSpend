@@ -18,6 +18,9 @@ import hashlib
 import json
 import math
 import sqlite3
+import time
+from contextlib import contextmanager
+from functools import wraps
 from datetime import datetime, timezone
 from typing import Any
 
@@ -44,6 +47,14 @@ def _hash_title(title: str) -> str:
     return f"[HASH:{hashlib.sha256(title.encode('utf-8')).hexdigest()[:8]}]"
 
 
+def atomic_write(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self.transaction():
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class Database:
     """SQLite-backed store for projects, activity events, attributed time
     and time entries."""
@@ -56,8 +67,38 @@ class Database:
         if path != ":memory:":
             self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self._write_depth = 0
         self._create_tables()
         self._migrate()
+
+    @contextmanager
+    def transaction(self):
+        """One commit for a complete write batch, including nested DB methods."""
+        outer = self._write_depth == 0
+        if outer:
+            for attempt in range(3):
+                try:
+                    self.conn.execute("BEGIN IMMEDIATE")
+                    break
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower() or attempt == 2:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+        self._write_depth += 1
+        try:
+            yield
+            if outer:
+                self.conn.commit()
+        except Exception:
+            if outer:
+                self.conn.rollback()
+            raise
+        finally:
+            self._write_depth -= 1
+
+    def _commit(self):
+        if self._write_depth == 0:
+            self.conn.commit()
 
     def _create_tables(self) -> None:
         self.conn.executescript(
@@ -194,6 +235,7 @@ class Database:
     # ------------------------------------------------------------------
     # Projects
     # ------------------------------------------------------------------
+    @atomic_write
     def upsert_project(self, project: Project) -> None:
         values = (project.standard_rate, project.loaded_cost_rate)
         if any(not math.isfinite(v) or v < 0 for v in values):
@@ -226,7 +268,7 @@ class Database:
                 project.created_at or _now_iso(),
             ),
         )
-        self.conn.commit()
+        self._commit()
 
     def get_project(self, project_id: str) -> Project | None:
         row = self.conn.execute(
@@ -255,6 +297,7 @@ class Database:
     # ------------------------------------------------------------------
     # Local team roster and project assignments
     # ------------------------------------------------------------------
+    @atomic_write
     def upsert_member(self, member: TeamMember) -> None:
         if not member.id.strip() or not member.name.strip():
             raise ValueError("Member ID and name are required.")
@@ -269,13 +312,14 @@ class Database:
             (member.id, member.name, member.role, member.loaded_cost_rate,
              int(member.is_active)),
         )
-        self.conn.commit()
+        self._commit()
 
     def list_members(self) -> list[TeamMember]:
         return [TeamMember(r["id"], r["name"], r["role"], r["loaded_cost_rate"],
                            bool(r["is_active"])) for r in
                 self.conn.execute("SELECT * FROM team_members ORDER BY name").fetchall()]
 
+    @atomic_write
     def assign_member(self, member_id: str, project_id: str) -> None:
         member = next((m for m in self.list_members() if m.id == member_id), None)
         project = self.get_project(project_id)
@@ -285,7 +329,7 @@ class Database:
             "INSERT OR IGNORE INTO project_assignments(member_id,project_id) VALUES (?,?)",
             (member_id, project_id),
         )
-        self.conn.commit()
+        self._commit()
 
     def list_assignments(self, member_id: str) -> list[str]:
         return [r["project_id"] for r in self.conn.execute(
@@ -296,6 +340,7 @@ class Database:
     # ------------------------------------------------------------------
     # Activity events (idempotent ingestion via UNIQUE(source, external_id))
     # ------------------------------------------------------------------
+    @atomic_write
     def ingest_event(self, event: ActivityEvent) -> bool:
         """Insert an activity event. Returns False if a duplicate
         (source, external_id) already exists — idempotent ingestion."""
@@ -324,7 +369,7 @@ class Database:
                     1 if event.title_redacted else 0,
                 ),
             )
-            self.conn.commit()
+            self._commit()
             return True
         except sqlite3.IntegrityError:
             # Duplicate (source, external_id) — ignore, idempotent.
@@ -363,6 +408,7 @@ class Database:
     # ------------------------------------------------------------------
     # Attributed time (project_id may be NULL for unassigned events)
     # ------------------------------------------------------------------
+    @atomic_write
     def upsert_attributed_time(self, at: AttributedTime) -> None:
         self.conn.execute(
             """
@@ -388,7 +434,7 @@ class Database:
                 at.created_at or _now_iso(),
             ),
         )
-        self.conn.commit()
+        self._commit()
 
     def list_attributed_time(self) -> list[AttributedTime]:
         rows = self.conn.execute(
@@ -411,6 +457,7 @@ class Database:
     # ------------------------------------------------------------------
     # Time entries
     # ------------------------------------------------------------------
+    @atomic_write
     def upsert_time_entry(self, entry: TimeEntry, actor_id: str | None = None) -> None:
         previous = self.get_time_entry(entry.id)
         self.conn.execute(
@@ -470,7 +517,7 @@ class Database:
                  previous.minutes if previous else None, entry.minutes,
                  entry.billed_minutes, _now_iso()),
             )
-        self.conn.commit()
+        self._commit()
 
     def list_entry_history(self, entry_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(

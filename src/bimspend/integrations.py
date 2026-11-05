@@ -152,7 +152,7 @@ class MiruMockExport:
         return self.exported.setdefault(entry_id, {"entry_id": entry_id, "project_id": project_id, "minutes": minutes})
 
 
-def ingest_synthetic_batch(db, events: list[ActivityEvent], rules: AttributionRules) -> dict[str, int]:
+def _ingest_synthetic_batch(db, events: list[ActivityEvent], rules: AttributionRules) -> dict[str, int]:
     """Explicit synthetic batch import; never updates an existing suggestion/review.
 
     Preserves manual corrections and approved records on repeated imports.
@@ -182,3 +182,9 @@ def ingest_synthetic_batch(db, events: list[ActivityEvent], rules: AttributionRu
                              actor_id="synthetic_import")
         created += 1
     return {"events": len(inserted), "suggestions": len(suggestions), "pending_entries": created}
+
+
+def ingest_synthetic_batch(db, events: list[ActivityEvent], rules: AttributionRules) -> dict[str, int]:
+    """Import all synthetic events and suggestions as one SQLite transaction."""
+    with db.transaction():
+        return _ingest_synthetic_batch(db, events, rules)
