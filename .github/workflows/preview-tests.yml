@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - work/bimspend-build-integration
+      - build/bimspend-p0-foundation
   workflow_dispatch:
 
 jobs:
