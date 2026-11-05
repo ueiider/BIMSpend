@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimspend.example.com/schemas/revit_document_opened.schema.json",
+  "title": "Revit Document Opened Event",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "timestamp_utc", "source", "correlation", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "revit.document.opened" },
+    "schema_version": { "const": "1.0.0" },
+    "timestamp_utc": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["component", "version", "instance_id", "process_id"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "const": "revit-connector" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "instance_id": { "type": "string", "format": "uuid" },
+        "process_id": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "required": ["session_id", "run_id"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string", "format": "uuid" },
+        "run_id": { "type": "string", "format": "uuid" },
+        "external_run_id": { "type": "string" },
+        "external_session_id": { "type": "string" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "required": ["document", "view", "process"],
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "type": "object",
+          "required": ["document_id", "title", "path", "is_workshared", "version_number", "is_detached", "is_new"],
+          "additionalProperties": false,
+          "properties": {
+            "document_id": { "type": "string", "format": "uuid" },
+            "title": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "is_workshared": { "type": "boolean" },
+            "central_path": { "type": ["string", "null"] },
+            "central_guid": { "type": ["string", "null"] },
+            "version_number": { "type": "integer", "minimum": 0 },
+            "last_saved_by": { "type": ["string", "null"] },
+            "last_saved_utc": { "type": ["string", "null"], "format": "date-time" },
+            "is_detached": { "type": "boolean" },
+            "is_new": { "type": "boolean" }
+          }
+        },
+        "view": {
+          "type": "object",
+          "required": ["view_id", "view_name", "view_type"],
+          "additionalProperties": false,
+          "properties": {
+            "view_id": { "type": "integer" },
+            "view_name": { "type": "string", "minLength": 1 },
+            "view_type": { "type": "string", "minLength": 1 }
+          }
+        },
+        "process": {
+          "type": "object",
+          "required": ["process_id", "session_id", "revit_version", "dotnet_runtime"],
+          "additionalProperties": false,
+          "properties": {
+            "process_id": { "type": "integer", "minimum": 0 },
+            "session_id": { "type": "string", "format": "uuid" },
+            "revit_version": { "type": "string", "minLength": 1 },
+            "dotnet_runtime": { "type": "string", "enum": [".NET Framework 4.8", ".NET 8.0", ".NET 9.0"] }
+          }
+        }
+      }
+    }
+  }
+}

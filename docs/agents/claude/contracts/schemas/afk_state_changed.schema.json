@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimspend.example.com/schemas/afk_state_changed.schema.json",
+  "title": "AFK State Changed Event",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "timestamp_utc", "source", "correlation", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "afk.state.changed" },
+    "schema_version": { "const": "1.0.0" },
+    "timestamp_utc": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["component", "version", "instance_id", "process_id"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "const": "aw-adapter" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "instance_id": { "type": "string", "format": "uuid" },
+        "process_id": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "required": ["session_id", "run_id"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string", "format": "uuid" },
+        "run_id": { "type": "string", "format": "uuid" },
+        "external_run_id": { "type": "string" },
+        "external_session_id": { "type": "string" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "required": ["state", "idle_duration_seconds", "trigger", "previous_state"],
+      "additionalProperties": false,
+      "properties": {
+        "state": { "type": "string", "enum": ["afk", "not_afk"] },
+        "idle_duration_seconds": { "type": "integer", "minimum": 0 },
+        "trigger": { "type": "string", "enum": ["mouse", "keyboard", "timeout"] },
+        "previous_state": { "type": ["string", "null"], "enum": ["afk", "not_afk", null] }
+      }
+    }
+  }
+}

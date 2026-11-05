@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimspend.example.com/schemas/envelope.schema.json",
+  "title": "BIMSpend Event Envelope",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "timestamp_utc", "source", "correlation", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique event identifier (UUID v4)"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "window.focus.changed",
+        "afk.state.changed",
+        "revit.document.opened",
+        "revit.document.closed",
+        "revit.view.activated",
+        "revit.application.idling",
+        "adapter.correlated.activity",
+        "adapter.ingestion.draft"
+      ],
+      "description": "Registered event type"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the event schema"
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event creation timestamp in UTC"
+    },
+    "source": {
+      "type": "object",
+      "required": ["component", "version", "instance_id", "process_id"],
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": ["revit-connector", "aw-adapter", "windows-adapter"],
+          "description": "Originating component"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Component version (semver)"
+        },
+        "instance_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Component instance identifier (UUID v4)"
+        },
+        "process_id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "OS process ID"
+        }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "required": ["session_id", "run_id"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Logical session identifier (UUID v4)"
+        },
+        "run_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Execution run identifier (UUID v4)"
+        },
+        "external_run_id": {
+          "type": "string",
+          "description": "Miru AgentKey external_run_id for idempotency"
+        },
+        "external_session_id": {
+          "type": "string",
+          "description": "Miru AgentKey external_session_id for idempotency"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event-type-specific payload"
+    }
+  }
+}

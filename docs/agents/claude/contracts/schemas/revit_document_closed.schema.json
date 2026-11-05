@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimspend.example.com/schemas/revit_document_closed.schema.json",
+  "title": "Revit Document Closed Event",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "timestamp_utc", "source", "correlation", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "const": "revit.document.closed" },
+    "schema_version": { "const": "1.0.0" },
+    "timestamp_utc": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["component", "version", "instance_id", "process_id"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "const": "revit-connector" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "instance_id": { "type": "string", "format": "uuid" },
+        "process_id": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "required": ["session_id", "run_id"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string", "format": "uuid" },
+        "run_id": { "type": "string", "format": "uuid" },
+        "external_run_id": { "type": "string" },
+        "external_session_id": { "type": "string" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "required": ["document_id", "title", "close_reason", "was_modified", "session_duration_seconds", "process"],
+      "additionalProperties": false,
+      "properties": {
+        "document_id": { "type": "string", "format": "uuid" },
+        "title": { "type": "string", "minLength": 1 },
+        "close_reason": { "type": "string", "enum": ["user_closed", "save_and_close", "crash", "revit_exit"] },
+        "was_modified": { "type": "boolean" },
+        "last_view": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "view_id": { "type": "integer" },
+            "view_name": { "type": "string", "minLength": 1 }
+          }
+        },
+        "session_duration_seconds": { "type": "integer", "minimum": 0 },
+        "process": {
+          "type": "object",
+          "required": ["process_id", "session_id"],
+          "additionalProperties": false,
+          "properties": {
+            "process_id": { "type": "integer", "minimum": 0 },
+            "session_id": { "type": "string", "format": "uuid" }
+          }
+        }
+      }
+    }
+  }
+}
