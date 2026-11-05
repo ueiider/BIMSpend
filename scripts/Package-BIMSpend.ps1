@@ -5,7 +5,7 @@ Push-Location $repoRoot
 try {
     $env:PYTHONPATH = Join-Path $repoRoot "src"
     New-Item -ItemType Directory -Force -Path ".preview" | Out-Null
-    & $Python -m PyInstaller --noconfirm --clean --onedir --windowed --name BIMSpend --paths src --add-data "data/synthetic:data/synthetic" --distpath ".preview/dist" --workpath ".preview/build" --specpath ".preview/spec" scripts/preview_entry.py
+    & $Python -m PyInstaller --noconfirm --clean --onedir --windowed --name BIMSpend --paths src --add-data "$(Join-Path $repoRoot 'data/synthetic'):data/synthetic" --distpath ".preview/dist" --workpath ".preview/build" --specpath ".preview/spec" scripts/preview_entry.py
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }
     $binary = Join-Path $repoRoot ".preview/dist/BIMSpend/BIMSpend.exe"
     if (-not (Test-Path $binary)) { throw "Expected preview EXE is missing." }
@@ -17,3 +17,4 @@ try {
 } finally {
     Pop-Location
 }
+
