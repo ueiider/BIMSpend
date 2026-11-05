@@ -37,3 +37,4 @@ Updated 2026-11-05.
 `2026-11-05 | Tested | Billing semantics | User clarification | Quantity in sales report is hours billed, not actual time.`
 `2026-11-05 | Hypothesis | Product value | Conversation | Tracking could feed cost realization and future estimates.`
 `2026-11-05 | Approved | Build 01 authorization | Owner explicit decision | Owner authorized initial vertical-slice development; B2-A audit deferred, not passed. Synthetic data and adapter interfaces only; no real employee data, no monitoring, no production deploy. Branch: build/opencode-bimspend-foundation.`
+`2026-11-05 | Tested | Build 01 domain layer | 7 pytest tests pass | Time-state separation, duplicate idempotency, attribution all verified. GUI shell added with Overview, Projects, Project Detail, Activity Timeline, Timesheet Review screens.`
