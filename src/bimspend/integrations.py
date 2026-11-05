@@ -9,7 +9,7 @@ import json
 from urllib.parse import quote, urlsplit
 from urllib.request import urlopen
 
-from bimspend.models import ActivityEvent, AttributedTime, Project
+from bimspend.models import ActivityEvent, AttributedTime, Project, TimeEntry
 
 
 def _utc(value: str) -> datetime:
@@ -150,3 +150,35 @@ class MiruMockExport:
         if not approved or not explicitly_requested:
             raise PermissionError("Approved time and explicit export action are required")
         return self.exported.setdefault(entry_id, {"entry_id": entry_id, "project_id": project_id, "minutes": minutes})
+
+
+def ingest_synthetic_batch(db, events: list[ActivityEvent], rules: AttributionRules) -> dict[str, int]:
+    """Explicit synthetic batch import; never updates an existing suggestion/review.
+
+    Preserves manual corrections and approved records on repeated imports.
+    The caller must provide synthetic events; the routine never calls adapters.
+    """
+    if any(not e.external_id or e.source not in ("activitywatch", "revit") for e in events):
+        raise ValueError("Only identified synthetic ActivityWatch/Revit events are accepted")
+    inserted = [e for e in events if db.ingest_event(e)]
+    existing = {s.id for s in db.list_attributed_time()}
+    suggestions = suggest(inserted, db.list_projects(), rules)
+    created = 0
+    for suggestion in suggestions:
+        if suggestion.id in existing:
+            continue
+        db.upsert_attributed_time(suggestion)
+        existing.add(suggestion.id)
+        if suggestion.project_id is None:
+            continue
+        source = next(e for e in inserted if e.id == suggestion.activity_event_id)
+        project = db.get_project(suggestion.project_id)
+        db.upsert_time_entry(TimeEntry(id="entry_" + suggestion.id,
+                                       attributed_time_id=suggestion.id,
+                                       project_id=project.id, user_id=source.user_id,
+                                       minutes=suggestion.attributed_minutes,
+                                       standard_rate=project.standard_rate,
+                                       loaded_cost_rate=project.loaded_cost_rate),
+                             actor_id="synthetic_import")
+        created += 1
+    return {"events": len(inserted), "suggestions": len(suggestions), "pending_entries": created}

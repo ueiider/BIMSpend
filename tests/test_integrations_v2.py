@@ -1,8 +1,9 @@
 import pytest
 
 from bimspend.integrations import (ActivityWatchLocalClient, AttributionRules,
-                                    MiruMockExport, parse_activitywatch, parse_revit, suggest)
-from bimspend.models import Project
+                                    MiruMockExport, ingest_synthetic_batch, parse_activitywatch, parse_revit, suggest)
+from bimspend.models import Project, TimeEntryState
+from bimspend.db import Database
 
 
 def test_disabled_network_and_loopback_validation():
@@ -51,3 +52,19 @@ def test_miru_mock_requires_explicit_approved_export():
     with pytest.raises(PermissionError):
         mock.export("e", "p", 30, approved=True, explicitly_requested=False)
     assert mock.export("e", "p", 30, approved=True, explicitly_requested=True) == mock.export("e", "p", 30, approved=True, explicitly_requested=True)
+
+
+def test_batch_flows_to_pending_cost_without_destroying_corrections(tmp_path):
+    db = Database(str(tmp_path / "preview.db"))
+    db.upsert_project(Project("p1", "Project", "Client", 120, 60, budget_aud=1000))
+    rows = [{"id": 7, "timestamp": "2026-01-01T00:00:00Z", "duration": 1800,
+             "data": {"app": "Revit", "title": "private title"}}]
+    events = parse_activitywatch("test-bucket", "currentwindow", rows, "designer_01")
+    rule = AttributionRules({}, {"Revit": "p1"})
+    assert ingest_synthetic_batch(db, events, rule) == {"events": 1, "suggestions": 1, "pending_entries": 1}
+    entry = db.list_time_entries()[0]
+    assert entry.state == TimeEntryState.PENDING_REVIEW
+    assert entry.loaded_cost_rate == 60 and entry.minutes == 30
+    assert db.list_events()[0].window_title != "private title"
+    assert ingest_synthetic_batch(db, events, rule) == {"events": 0, "suggestions": 0, "pending_entries": 0}
+    assert len(db.list_time_entries()) == 1
