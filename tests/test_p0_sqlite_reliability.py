@@ -127,3 +127,34 @@ def test_archive_roundtrip_and_unique_source_attribution(tmp_path):
     assert reopened.conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 2
     assert reopened.conn.execute("PRAGMA foreign_key_check").fetchall() == []
     reopened.close()
+
+
+def test_duplicate_legacy_rows_block_migration_without_deletion(tmp_path):
+    path = str(tmp_path / "legacy-duplicates.db")
+    db = Database(path)
+    db.upsert_project(Project("p", "Project", "Synthetic", 100, 50))
+    db.ingest_event(ActivityEvent("ev", "synthetic", "source-1", "designer_01", "Revit", "safe",
+                                  "2026-01-01T01:00:00Z", "2026-01-01T01:15:00Z", 15))
+    db.upsert_attributed_time(AttributedTime("a", "ev", "p", 15, 1, "manual"))
+    db.upsert_time_entry(TimeEntry("e1", "a", "p", "designer_01", 15))
+    db.conn.execute("DROP INDEX ux_time_entries_attribution")
+    db.conn.execute("DELETE FROM schema_version WHERE version=2")
+    db.conn.execute("INSERT INTO time_entries SELECT 'e2',attributed_time_id,project_id,user_id,minutes,state,standard_rate,loaded_cost_rate,billed_minutes,review_notes,reviewed_by,reviewed_at,submitted_by,submitted_at,created_at,is_archived FROM time_entries WHERE id='e1'")
+    db.conn.commit()
+    db.close()
+    with pytest.raises(RuntimeError, match="manual reconciliation"):
+        Database(path)
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT count(*) FROM time_entries").fetchone()[0] == 2
+        assert conn.execute("SELECT max(version) FROM schema_version").fetchone()[0] == 1
+
+
+def test_reject_newer_schema_without_mutating_file(tmp_path):
+    path = str(tmp_path / "future.db")
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
+        conn.execute("INSERT INTO schema_version VALUES (99, '2099-01-01T00:00:00Z')")
+    with pytest.raises(RuntimeError, match="newer"):
+        Database(path)
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT count(*) FROM sqlite_master WHERE name='projects'").fetchone()[0] == 0
