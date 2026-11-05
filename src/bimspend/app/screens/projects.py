@@ -250,6 +250,10 @@ class ProjectDialog(tk.Toplevel):
         self.cost_var = tk.StringVar(value="85.00")
         ttk.Entry(frame, textvariable=self.cost_var, width=40).pack(fill="x", pady=(2, 10))
 
+        ttk.Label(frame, text="Labor Budget (A$, optional)", style="MetricLabel.TLabel").pack(anchor="w")
+        self.budget_var = tk.StringVar()
+        ttk.Entry(frame, textvariable=self.budget_var, width=40).pack(fill="x", pady=(2, 10))
+
         self.is_billable_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             frame,
@@ -270,6 +274,7 @@ class ProjectDialog(tk.Toplevel):
         self.rate_var.set(f"{project.standard_rate:.2f}")
         self.cost_var.set(f"{project.loaded_cost_rate:.2f}")
         self.is_billable_var.set(project.is_billable)
+        self.budget_var.set("" if project.budget_aud is None else f"{project.budget_aud:.2f}")
 
     def _save(self) -> None:
         name = self.name_var.get().strip()
@@ -287,12 +292,15 @@ class ProjectDialog(tk.Toplevel):
         try:
             rate = float(self.rate_var.get())
             cost = float(self.cost_var.get())
+            budget = float(self.budget_var.get()) if self.budget_var.get().strip() else None
         except ValueError:
             from tkinter import messagebox
             messagebox.showerror("Validation Error", "Rate and cost must be numeric.")
             return
 
-        if rate < 0 or cost < 0:
+        import math
+        if (not math.isfinite(rate) or not math.isfinite(cost) or rate < 0 or cost < 0
+                or (budget is not None and (not math.isfinite(budget) or budget < 0))):
             from tkinter import messagebox
             messagebox.showerror("Validation Error", "Rates must not be negative.")
             return
@@ -304,6 +312,7 @@ class ProjectDialog(tk.Toplevel):
             self.project.standard_rate = rate
             self.project.loaded_cost_rate = cost
             self.project.is_billable = self.is_billable_var.get()
+            self.project.budget_aud = budget
             self.result = self.project
         else:
             # Create new
@@ -315,6 +324,7 @@ class ProjectDialog(tk.Toplevel):
                 standard_rate=rate,
                 loaded_cost_rate=cost,
                 is_billable=self.is_billable_var.get(),
+                budget_aud=budget,
             )
 
         self.destroy()

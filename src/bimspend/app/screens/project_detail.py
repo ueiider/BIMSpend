@@ -74,6 +74,8 @@ class ProjectDetailScreen(BaseScreen):
             ("Approved Hours", f"{summary['approved_hours']}", "Manager-approved"),
             ("Billed Hours", f"{summary['billed_hours']}", "Invoiced"),
             ("Labor Cost", f"A${summary['labor_cost_aud']}", "Internal loaded cost"),
+            ("Labor Budget", ("A$" + format(summary["budget_aud"], ".2f")) if summary["budget_aud"] is not None else "Not set", "Approved cost basis"),
+            ("Budget Remaining", ("A$" + format(summary["budget_remaining_aud"], ".2f")) if summary["budget_remaining_aud"] is not None else "Not set", "May be negative"),
             ("Standard Value", f"A${summary['standard_value_aud']}", "Client charge value"),
         ]
 

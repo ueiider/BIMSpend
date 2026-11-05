@@ -62,6 +62,9 @@ def project_summary(
         "standard_rate": project.standard_rate,
         "loaded_cost_rate": project.loaded_cost_rate,
         "is_billable": project.is_billable,
+        "budget_aud": project.budget_aud,
+        "budget_remaining_aud": round(project.budget_aud - labor_cost, 2) if project.budget_aud is not None else None,
+        "budget_used_percent": round(labor_cost / project.budget_aud * 100, 1) if project.budget_aud else None,
         # Observed (ActivityWatch) attention — NOT productive effort.
         "observed_hours": round(observed_hours, 2),
         # Attributed (correlated) project time — pending designer review.

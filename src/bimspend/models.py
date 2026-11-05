@@ -48,6 +48,7 @@ class Project:
     is_billable: bool = True
     created_at: Optional[str] = None
     is_archived: bool = False
+    budget_aud: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,6 +60,7 @@ class Project:
             "is_billable": self.is_billable,
             "created_at": self.created_at,
             "is_archived": self.is_archived,
+            "budget_aud": self.budget_aud,
         }
 
     @classmethod
@@ -72,6 +74,7 @@ class Project:
             is_billable=bool(data.get("is_billable", True)),
             created_at=data.get("created_at"),
             is_archived=bool(data.get("is_archived", False)),
+            budget_aud=float(data["budget_aud"]) if data.get("budget_aud") is not None else None,
         )
 
 

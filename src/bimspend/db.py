@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -66,6 +67,7 @@ class Database:
                 loaded_cost_rate REAL NOT NULL,
                 is_billable INTEGER NOT NULL DEFAULT 1,
                 is_archived INTEGER NOT NULL DEFAULT 0,
+                budget_aud REAL,
                 created_at TEXT NOT NULL
             );
 
@@ -154,6 +156,9 @@ class Database:
         if "is_archived" not in cols:
             self.conn.execute("ALTER TABLE projects ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0")
 
+        if "budget_aud" not in cols:
+            self.conn.execute("ALTER TABLE projects ADD COLUMN budget_aud REAL")
+
         # activity_events: add title_redacted if missing
         cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(activity_events)")}
         if "title_redacted" not in cols:
@@ -183,18 +188,24 @@ class Database:
     # Projects
     # ------------------------------------------------------------------
     def upsert_project(self, project: Project) -> None:
+        values = (project.standard_rate, project.loaded_cost_rate)
+        if any(not math.isfinite(v) or v < 0 for v in values):
+            raise ValueError("Project rates must be finite nonnegative numbers.")
+        if project.budget_aud is not None and (not math.isfinite(project.budget_aud) or project.budget_aud < 0):
+            raise ValueError("Budget must be finite and nonnegative.")
         self.conn.execute(
             """
             INSERT INTO projects (id, name, client, standard_rate,
-                                  loaded_cost_rate, is_billable, is_archived, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                  loaded_cost_rate, is_billable, is_archived, budget_aud, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name,
                 client=excluded.client,
                 standard_rate=excluded.standard_rate,
                 loaded_cost_rate=excluded.loaded_cost_rate,
                 is_billable=excluded.is_billable,
-                is_archived=excluded.is_archived
+                is_archived=excluded.is_archived,
+                budget_aud=excluded.budget_aud
             """,
             (
                 project.id,
@@ -204,6 +215,7 @@ class Database:
                 project.loaded_cost_rate,
                 1 if project.is_billable else 0,
                 1 if project.is_archived else 0,
+                project.budget_aud,
                 project.created_at or _now_iso(),
             ),
         )
@@ -229,6 +241,7 @@ class Database:
             loaded_cost_rate=row["loaded_cost_rate"],
             is_billable=bool(row["is_billable"]),
             is_archived=bool(row["is_archived"]),
+            budget_aud=row["budget_aud"],
             created_at=row["created_at"],
         )
 
