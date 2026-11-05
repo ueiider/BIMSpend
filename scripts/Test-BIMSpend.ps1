@@ -15,7 +15,8 @@ try {
         "tests/test_team_management.py::test_team_screen_can_open_and_refresh",
         "tests/test_reporting.py::test_report_date_filter_grouping_csv_and_privacy",
         "tests/test_historical_estimates.py::test_estimating_screen_opens_with_no_history",
-        "tests/test_integrations_v2.py::test_gui_integrations_import_and_navigation"
+        "tests/test_integrations_v2.py::test_gui_integrations_import_and_navigation",
+        "tests/test_p0_sqlite_reliability.py::test_startup_without_external_adapter_modules"
     )
     foreach ($test in $guiTests) {
         $path = ($test -split "::")[0]

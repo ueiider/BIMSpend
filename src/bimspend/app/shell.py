@@ -16,10 +16,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Any
 
-from bimspend.adapters.activitywatch import ActivityWatchAdapter
-from bimspend.adapters.miru import MiruProjectAdapter
 from bimspend.db import Database
-from bimspend.models import Project, TimeEntryState
+from bimspend.models import Project, ActivityEvent, TimeEntryState
 from bimspend.dashboard import all_projects_summary
 
 
@@ -217,8 +215,8 @@ class BIMSpendApp:
         # Seed projects fixture if empty
         if not self.projects:
             try:
-                projects_adapter = MiruProjectAdapter(_fixture("projects.json"))
-                projects = projects_adapter.get_projects()
+                with open(_fixture("projects.json"), encoding="utf-8") as fixture:
+                    projects = [Project.from_dict(row) for row in json.load(fixture)]
                 for p in projects:
                     self.db.upsert_project(p)
                 self.projects = projects
@@ -233,8 +231,8 @@ class BIMSpendApp:
         existing_events = self.db.list_events()
         if not existing_events:
             try:
-                events_adapter = ActivityWatchAdapter(_fixture("events.json"))
-                events = events_adapter.get_events()
+                with open(_fixture("events.json"), encoding="utf-8") as fixture:
+                    events = [ActivityEvent.from_dict(row) for row in json.load(fixture)]
                 # Correlate synthetic titles in memory before the privacy boundary.
                 # Persistence keeps hashed titles and drops untrusted raw payloads.
                 from bimspend.correlation import correlate_events
