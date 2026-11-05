@@ -135,6 +135,24 @@ class TimesheetReviewScreen(BaseScreen):
             command=self._reject_selected,
         ).pack(side="left")
 
+        # Billing is a separate manager action after approval.
+        approved_frame = ttk.Frame(self, style="App.TFrame")
+        approved_frame.pack(fill="x", pady=(12, 0))
+        ttk.Label(approved_frame, text="Approved, not yet billed",
+                  style="MetricLabel.TLabel").pack(anchor="w")
+        self.approved_tree = ttk.Treeview(
+            approved_frame, columns=("project", "minutes", "billed"),
+            show="headings", height=4)
+        for col, title in (("project", "Project"), ("minutes", "Approved minutes"),
+                           ("billed", "Billed minutes")):
+            self.approved_tree.heading(col, text=title)
+            self.approved_tree.column(col, width=160)
+        self.approved_tree.pack(fill="x")
+        ttk.Button(approved_frame, text="Bill selected explicitly",
+                   command=self._bill_selected).pack(anchor="w", pady=4)
+        ttk.Button(pending_btns, text="Edit minutes",
+                   command=self._edit_selected).pack(side="left", padx=8)
+
         # Populate
         self._refresh()
 
@@ -145,6 +163,9 @@ class TimesheetReviewScreen(BaseScreen):
             self.pending_tree.delete(item)
         for item in self.submitted_tree.get_children():
             self.submitted_tree.delete(item)
+
+        for item in self.approved_tree.get_children():
+            self.approved_tree.delete(item)
 
         entries = self.app.db.list_time_entries()
         projects = {p.id: p for p in self.app.projects}
@@ -159,6 +180,12 @@ class TimesheetReviewScreen(BaseScreen):
                     "end",
                     text=entry.id,
                     values=(project_name, f"{entry.minutes:.0f}", entry.state.value.replace("_", " ").title()),
+                )
+            elif entry.state == TimeEntryState.APPROVED:
+                self.approved_tree.insert(
+                    "", "end", text=entry.id,
+                    values=(project_name, f"{entry.minutes:.0f}",
+                            f"{entry.billed_minutes:.0f}"),
                 )
             elif entry.state == TimeEntryState.SUBMITTED:
                 self.submitted_tree.insert(
@@ -183,9 +210,9 @@ class TimesheetReviewScreen(BaseScreen):
 
         try:
             submit_entry(entry, submitted_by=self.current_user)
-            self.app.db.upsert_time_entry(entry)
+            self.app.db.upsert_time_entry(entry, actor_id=self.current_user)
             self._refresh()
-        except ValueError as exc:
+        except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
             messagebox.showerror("Submit Error", str(exc))
 
@@ -204,9 +231,9 @@ class TimesheetReviewScreen(BaseScreen):
 
         try:
             reset_to_pending(entry, self.current_user)
-            self.app.db.upsert_time_entry(entry)
+            self.app.db.upsert_time_entry(entry, actor_id=self.current_user)
             self._refresh()
-        except ValueError as exc:
+        except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
             messagebox.showerror("Reset Error", str(exc))
 
@@ -225,9 +252,9 @@ class TimesheetReviewScreen(BaseScreen):
 
         try:
             approve_entry(entry, reviewed_by="manager_demo")
-            self.app.db.upsert_time_entry(entry)
+            self.app.db.upsert_time_entry(entry, actor_id="manager_demo")
             self._refresh()
-        except ValueError as exc:
+        except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
             messagebox.showerror("Approve Error", str(exc))
 
@@ -252,8 +279,51 @@ class TimesheetReviewScreen(BaseScreen):
 
         try:
             reject_entry(entry, reviewed_by="manager_demo", notes=reason)
-            self.app.db.upsert_time_entry(entry)
+            self.app.db.upsert_time_entry(entry, actor_id="manager_demo")
             self._refresh()
-        except ValueError as exc:
+        except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
             messagebox.showerror("Reject Error", str(exc))
+
+
+    def _edit_selected(self) -> None:
+        from tkinter import simpledialog, messagebox
+        selected = self.pending_tree.selection()
+        if not selected:
+            messagebox.showinfo("Edit", "Select a pending entry.")
+            return
+        entry = self.db.get_time_entry(self.pending_tree.item(selected[0])["text"])
+        if entry is None:
+            return
+        minutes = simpledialog.askfloat("Edit time", "Confirmed minutes:",
+                                        initialvalue=entry.minutes)
+        if minutes is None:
+            return
+        from bimspend.review import edit_entry
+        try:
+            edit_entry(entry, minutes, self.current_user)
+            self.db.upsert_time_entry(entry, actor_id=self.current_user)
+            self._refresh()
+        except (ValueError, PermissionError) as exc:
+            messagebox.showerror("Edit Error", str(exc))
+
+    def _bill_selected(self) -> None:
+        from tkinter import simpledialog, messagebox
+        selected = self.approved_tree.selection()
+        if not selected:
+            messagebox.showinfo("Bill", "Select an approved entry.")
+            return
+        entry = self.db.get_time_entry(self.approved_tree.item(selected[0])["text"])
+        if entry is None:
+            return
+        minutes = simpledialog.askfloat("Explicit billing", "Billed minutes:",
+                                        initialvalue=entry.minutes)
+        if minutes is None:
+            return
+        from bimspend.review import bill_entry
+        try:
+            bill_entry(entry, minutes, reviewed_by="manager_demo")
+            self.db.upsert_time_entry(entry, actor_id="manager_demo")
+            self._refresh()
+        except (ValueError, PermissionError) as exc:
+            messagebox.showerror("Billing Error", str(exc))

@@ -167,6 +167,12 @@ def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
         timesheet = app.screens["timesheet_review"]
         pending_item = next(i for i in timesheet.pending_tree.get_children() if timesheet.pending_tree.item(i, "text") == entry_id)
         timesheet.pending_tree.selection_set(pending_item)
+        monkeypatch.setattr(simpledialog, "askfloat", lambda *args, **kwargs: 42)
+        timesheet._edit_selected()
+        assert app.db.get_time_entry(entry_id).minutes == 42
+        pending_item = next(i for i in timesheet.pending_tree.get_children()
+                            if timesheet.pending_tree.item(i, "text") == entry_id)
+        timesheet.pending_tree.selection_set(pending_item)
         timesheet._submit_selected()
         assert app.db.get_time_entry(entry_id).state == TimeEntryState.SUBMITTED
         submitted_item = next(i for i in timesheet.submitted_tree.get_children() if timesheet.submitted_tree.item(i, "text") == entry_id)
@@ -176,6 +182,18 @@ def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
         assert approved.state == TimeEntryState.APPROVED
         assert approved.billed_minutes == 0
         assert approved.reviewed_by == "manager_demo"
+        approved_item = next(i for i in timesheet.approved_tree.get_children()
+                             if timesheet.approved_tree.item(i, "text") == entry_id)
+        timesheet.approved_tree.selection_set(approved_item)
+        monkeypatch.setattr(simpledialog, "askfloat", lambda *args, **kwargs: 30)
+        timesheet._bill_selected()
+        billed = app.db.get_time_entry(entry_id)
+        assert billed.state == TimeEntryState.BILLED
+        assert billed.billed_minutes == 30
+        history = app.db.list_entry_history(entry_id)
+        assert [row["action"] for row in history] == [
+            "created", "edited", "submitted", "approved", "billed"]
+        assert history[-1]["actor_id"] == "manager_demo"
     finally:
         app.destroy()
 
@@ -214,3 +232,37 @@ def test_billed_time_retains_approved_cost_and_hours():
     assert summary["billed_hours"] == 1
     assert summary["labor_cost_aud"] == 180
     assert summary["standard_value_aud"] == 300
+
+
+def test_domain_edit_ownership_and_audit_survives_restart(tmp_path):
+    from bimspend.review import edit_entry
+    from bimspend.models import TimeEntry
+    path = str(tmp_path / "audit.db")
+    db = Database(path)
+    project = Project("p", "Synthetic project", "Client", 150, 80)
+    db.upsert_project(project)
+    event = ActivityEvent("e", "synthetic", "source-1", "designer_01", "Revit",
+                          "Synthetic title", "2026-01-01T00:00:00Z",
+                          "2026-01-01T01:00:00Z", 60)
+    db.ingest_event(event)
+    from bimspend.models import AttributedTime
+    db.upsert_attributed_time(AttributedTime("a", "e", "p", 60, 1.0, "manual"))
+    entry = TimeEntry("t", "a", "p", "designer_01", 60)
+    db.upsert_time_entry(entry)
+    with pytest.raises(PermissionError):
+        edit_entry(entry, 30, "designer_02")
+    with pytest.raises(ValueError):
+        edit_entry(entry, 0, "designer_01")
+    edit_entry(entry, 30, "designer_01")
+    db.upsert_time_entry(entry, actor_id="designer_01")
+    submit_entry(entry, "designer_01")
+    db.upsert_time_entry(entry, actor_id="designer_01")
+    with pytest.raises(ValueError):
+        edit_entry(entry, 20, "designer_01")
+    db.close()
+    db = Database(path)
+    assert db.get_time_entry("t").minutes == 30
+    assert [row["action"] for row in db.list_entry_history("t")] == [
+        "created", "edited", "submitted"]
+    assert db.list_entry_history("t")[1]["actor_id"] == "designer_01"
+    db.close()

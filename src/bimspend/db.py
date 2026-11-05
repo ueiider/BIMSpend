@@ -95,6 +95,19 @@ class Database:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS time_entry_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_id TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                previous_state TEXT,
+                new_state TEXT NOT NULL,
+                previous_minutes REAL,
+                new_minutes REAL NOT NULL,
+                billed_minutes REAL NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS time_entries (
                 id TEXT PRIMARY KEY,
                 attributed_time_id TEXT NOT NULL REFERENCES attributed_time(id),
@@ -322,7 +335,8 @@ class Database:
     # ------------------------------------------------------------------
     # Time entries
     # ------------------------------------------------------------------
-    def upsert_time_entry(self, entry: TimeEntry) -> None:
+    def upsert_time_entry(self, entry: TimeEntry, actor_id: str | None = None) -> None:
+        previous = self.get_time_entry(entry.id)
         self.conn.execute(
             """
             INSERT INTO time_entries
@@ -365,7 +379,30 @@ class Database:
                 entry.created_at or _now_iso(),
             ),
         )
+        if previous is None or (previous.state != entry.state or
+                                previous.minutes != entry.minutes or
+                                previous.billed_minutes != entry.billed_minutes):
+            action = ("created" if previous is None else
+                      entry.state.value if previous.state != entry.state else "edited")
+            self.conn.execute(
+                """INSERT INTO time_entry_audit
+                   (entry_id, actor_id, action, previous_state, new_state,
+                    previous_minutes, new_minutes, billed_minutes, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (entry.id, actor_id or "unspecified_demo", action,
+                 previous.state.value if previous else None, entry.state.value,
+                 previous.minutes if previous else None, entry.minutes,
+                 entry.billed_minutes, _now_iso()),
+            )
         self.conn.commit()
+
+    def list_entry_history(self, entry_id: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT actor_id, action, previous_state, new_state, previous_minutes,"
+            " new_minutes, billed_minutes, recorded_at FROM time_entry_audit"
+            " WHERE entry_id = ? ORDER BY id", (entry_id,)
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def get_time_entry(self, entry_id: str) -> TimeEntry | None:
         row = self.conn.execute(
