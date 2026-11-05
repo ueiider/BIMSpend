@@ -16,3 +16,10 @@ All notable structural and documentation changes are recorded here. This changel
 - Added `templates/decision-log-template.md` and `docs/meeting-notes/meeting-notes-template.md`.
 - Retained all original SVG diagrams (well-formed) and synthetic example data.
 - Committed and pushed to GitHub; repository visibility confirmed PRIVATE.
+
+## 2026-11-05 — Open-source candidate assessment
+
+- Documented Miru (MIT), ActivityWatch (MPL-2.0), optional Journalysis (MIT), and custom Revit add-in as research candidates, not selected architecture.
+- Added licensing caveats, component architecture hypothesis, security/privacy checks, mandatory integration tests, and conditional prototype GO / production NO-GO.
+- Updated `CONTEXT_FOR_AI.md` so future agents can resume with the latest findings and mobile dashboard hypothesis.
+- No software installed, code copied, production deployment performed, or MVP approved.
