@@ -52,7 +52,7 @@ class OverviewScreen(BaseScreen):
         attributed_entries = self.db.list_attributed_time()
         total_attributed = sum(a.attributed_minutes for a in attributed_entries) / 60.0
 
-        approved_entries = [e for e in entries if e.state == TimeEntryState.APPROVED]
+        approved_entries = [e for e in entries if e.state in (TimeEntryState.APPROVED, TimeEntryState.BILLED)]
         total_approved = sum(e.minutes for e in approved_entries) / 60.0
 
         billed_entries = [e for e in entries if e.state == TimeEntryState.BILLED]
@@ -106,7 +106,7 @@ class OverviewScreen(BaseScreen):
         # Project rows
         for project in projects:
             project_entries = [e for e in entries if e.project_id == project.id]
-            approved_e = [e for e in project_entries if e.state == TimeEntryState.APPROVED]
+            approved_e = [e for e in project_entries if e.state in (TimeEntryState.APPROVED, TimeEntryState.BILLED)]
             billed_e = [e for e in project_entries if e.state == TimeEntryState.BILLED]
             pending_e = [e for e in project_entries if e.state == TimeEntryState.PENDING_REVIEW]
             submitted_e = [e for e in project_entries if e.state == TimeEntryState.SUBMITTED]

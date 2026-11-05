@@ -5,16 +5,18 @@ Source integration: OpenCode `e955eb0bb23bd447be02318422c7b925a105710b` merged w
 ## Executed on Windows in isolated workspace
 
 - Baseline: 7/7 existing tests passed; synthetic runner completed; Python compileall passed; Tkinter 8.6 imported.
-- After integration: 12/12 tests passed with `PYTHONPATH=src; python -m pytest tests -q --basetemp=.pytest_tmp`. The new regression tests created and updated all five Tkinter screens, exercised create/edit/archive project, manual ambiguous attribution, designer submission, manager approval, and verified persistent restart. This proves programmatic widget creation, not visual usability or manual click paths.
-- Initial `pytest` without `--basetemp` failed because this sandbox denied creation of its default temporary directory. The test script sets a workspace local temporary directory; it passed with 12/12 tests.
+- After integration: 14/14 tests passed with `PYTHONPATH=src; python -m pytest tests -q --basetemp=.pytest_tmp`. The new regression tests created and updated all five Tkinter screens, exercised create/edit/archive project, manual ambiguous attribution, designer submission, manager approval, and verified persistent restart. This proves programmatic widget creation, not visual usability or manual click paths.
+- Initial `pytest` without `--basetemp` failed because this sandbox denied creation of its default temporary directory. The test script sets a workspace local temporary directory; it passed with 14/14 tests.
 - No real capture or external transmission was invoked. This is supported by inspected fixture adapters and test paths, not a network traffic audit.
-- No standalone EXE built. Windows scripts use the existing Python standard library application. CI workflow results remain **NOT RUN** until GitHub Actions completes.
+- No standalone EXE built. Windows scripts use the existing Python standard library application. GitHub Actions Windows workflow for checkpoint bf1e3cb332406d30e056b17c37253849d5bda724 completed SUCCESS: https://github.com/ueiider/BIMSpend/actions/runs/42010142369 (12 tests); this subsequent 13-test checkpoint requires its own CI run.
 
 ## Implemented here
 
 - Preserve separate explicit project `is_archived` across SQLite migration, JSON model and GUI. Previous prefix rename and `is_billable = False` archive behavior corrupted commercial identity.
 - Generate new project IDs with UUIDs instead of list length, preventing reused IDs after project removal or fixture replacement.
 - Hash non-redacted window titles before SQLite storage; discard untrusted raw payloads. Synthetic title correlation now runs in memory before the persistence privacy boundary. Existing historical databases may already hold raw titles; no automatic migration or destructive scrub is attempted.
+- Count already billed entries in approved hours and internal cost; billing is a later state and does not undo approval. Added regression for billed versus approved hours and labor cost.
+- Repair synthetic runner repeat execution: preserve existing time states, project edits and persisted attribution summaries instead of resubmitting billed time. A two-run regression verifies event and entry counts plus edits remain stable.
 - Seed attributed suggestions and pending timesheet entries from synthetic events; skip duplicate source events. Ambiguous events stay unassigned. Manual assignment to an authorized active project creates a pending entry.
 - Display observed hours from non-AFK events on the overview instead of using attributed hours as proxy.
 - Expose rejected entries in the designer review list; manager actions in the demo label `manager_demo` (no real authentication/authorization). Remove duplicate SQLite connection in app startup.

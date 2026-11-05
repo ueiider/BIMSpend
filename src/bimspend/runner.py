@@ -42,7 +42,9 @@ def run() -> None:
     projects_adapter = MiruProjectAdapter(_fixture("projects.json"))
     projects = projects_adapter.get_projects()
     for p in projects:
-        db.upsert_project(p)
+        if db.get_project(p.id) is None:
+            db.upsert_project(p)
+    projects = db.list_projects()
 
     # 2. Activity event ingestion (ActivityWatch-like adapter)
     events_adapter = ActivityWatchAdapter(_fixture("events.json"))
@@ -65,6 +67,8 @@ def run() -> None:
     events_minutes_by_project: dict[str, float] = {}
     for at in attributed:
         db.upsert_attributed_time(at)
+    all_attributed = db.list_attributed_time()
+    for at in all_attributed:
         if at.project_id is not None:
             attributed_by_project[at.project_id] = (
                 attributed_by_project.get(at.project_id, 0.0) + at.attributed_minutes
@@ -82,6 +86,7 @@ def run() -> None:
 
     # 4. Designer review: convert attributed -> pending time entries,
     #    then submit/approve/reject/bill to demonstrate state separation.
+    fresh_entries = []
     for at in attributed:
         if at.project_id is None:
             # Unassigned events stay unassigned — no entry created
@@ -89,14 +94,15 @@ def run() -> None:
             continue
         project = proj_by_id[at.project_id]
         entry = suggest_entry(at, project, demo_user)
-        db.upsert_time_entry(entry)
+        if db.get_time_entry(entry.id) is None:
+            db.upsert_time_entry(entry)
+            fresh_entries.append(entry)
 
     # Simulate designer decisions on entries:
     #   entry 0: submit -> manager approves -> bill (partial billing)
     #   entry 1: submit -> manager rejects
     #   entry 2+: stay pending_review
-    entries = db.list_time_entries()
-    for i, entry in enumerate(entries):
+    for i, entry in enumerate(fresh_entries):
         if i == 0:
             # Designer submits
             submit_entry(entry, submitted_by=demo_user)
@@ -128,7 +134,7 @@ def run() -> None:
     print()
     print(f"Ingested activity events: {ingested} new, {duplicates} duplicates "
           f"(idempotent on source+external_id)")
-    print(f"Attributed time records: {len(attributed)}")
+    print(f"Attributed time records: {len(all_attributed)}")
     print(f"Time entries: {len(entries)}")
     print(f"  {sum(1 for e in entries if e.state == TimeEntryState.PENDING_REVIEW)} pending_review")
     print(f"  {sum(1 for e in entries if e.state == TimeEntryState.SUBMITTED)} submitted")

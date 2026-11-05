@@ -102,7 +102,7 @@ class ProjectsScreen(BaseScreen):
             if project.is_archived:
                 continue
             project_entries = [e for e in entries if e.project_id == project.id]
-            approved_e = [e for e in project_entries if e.state == TimeEntryState.APPROVED]
+            approved_e = [e for e in project_entries if e.state in (TimeEntryState.APPROVED, TimeEntryState.BILLED)]
             billed_e = [e for e in project_entries if e.state == TimeEntryState.BILLED]
 
             attributed = [a for a in self.db.list_attributed_time() if a.project_id == project.id]

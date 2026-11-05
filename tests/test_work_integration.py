@@ -178,3 +178,39 @@ def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
         assert approved.reviewed_by == "manager_demo"
     finally:
         app.destroy()
+
+
+def test_runner_can_repeat_without_resetting_states_or_project_edits(tmp_path, monkeypatch, capsys):
+    from bimspend.runner import run
+    monkeypatch.chdir(tmp_path)
+    run()
+    db = Database("bimspend_demo.db")
+    before_events = len(db.list_events())
+    before_entries = [(e.id, e.state, e.billed_minutes) for e in db.list_time_entries()]
+    project = db.list_projects()[0]
+    project.name = "Locally edited synthetic project"
+    db.upsert_project(project)
+    db.close()
+    run()
+    assert "Locally edited synthetic project" in capsys.readouterr().out
+    db = Database("bimspend_demo.db")
+    assert len(db.list_events()) == before_events
+    assert [(e.id, e.state, e.billed_minutes) for e in db.list_time_entries()] == before_entries
+    assert db.get_project(project.id).name == "Locally edited synthetic project"
+    db.close()
+
+
+
+def test_billed_time_retains_approved_cost_and_hours():
+    from bimspend.dashboard import project_summary
+    from bimspend.models import TimeEntry
+    project = Project("p", "Synthetic project", "Client", 150, 90)
+    entry = TimeEntry("e", "a", "p", "designer", 120,
+                      state=TimeEntryState.BILLED,
+                      standard_rate=150, loaded_cost_rate=90, billed_minutes=60)
+    summary = project_summary(project, 120, 120, [entry])
+    assert entry.is_approved
+    assert summary["approved_hours"] == 2
+    assert summary["billed_hours"] == 1
+    assert summary["labor_cost_aud"] == 180
+    assert summary["standard_value_aud"] == 300

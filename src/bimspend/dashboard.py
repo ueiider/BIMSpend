@@ -35,7 +35,7 @@ def project_summary(
         attributed_minutes: total ATTRIBUTED minutes (correlation output).
         entries: all time entries for the project.
     """
-    approved = [e for e in entries if e.state == TimeEntryState.APPROVED]
+    approved = [e for e in entries if e.state in (TimeEntryState.APPROVED, TimeEntryState.BILLED)]
     rejected = [e for e in entries if e.state == TimeEntryState.REJECTED]
     pending = [e for e in entries if e.state == TimeEntryState.PENDING_REVIEW]
     submitted = [e for e in entries if e.state == TimeEntryState.SUBMITTED]
@@ -73,7 +73,7 @@ def project_summary(
         # Invoiced/billed hours (may differ from approved — realization gap).
         "billed_hours": round(billed_hours, 2),
         # Counts by state.
-        "approved_count": len(approved),
+        "approved_count": len(approved),  # includes already billed entries
         "rejected_count": len(rejected),
         "pending_count": len(pending),
         "submitted_count": len(submitted),

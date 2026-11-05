@@ -250,7 +250,7 @@ class TimeEntry:
 
     @property
     def is_approved(self) -> bool:
-        return self.state == TimeEntryState.APPROVED
+        return self.state in (TimeEntryState.APPROVED, TimeEntryState.BILLED)
 
     @property
     def is_billed(self) -> bool:
