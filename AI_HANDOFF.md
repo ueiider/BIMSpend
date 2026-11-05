@@ -53,3 +53,34 @@ Do not implement the adapter, Revit connector, Miru modifications, branding or p
 ## Prohibitions
 
 Do not auto-advance to BUILD. Do not install on the user's machine, deploy, use confidential data, modify product code, touch FBT Revit Academy, expose ActivityWatch remotely, or equate window focus with actual/billable work.
+
+
+## Architecture realignment checkpoint — 2026-11-05
+
+Dedicated branch: `agent/work-open-source-reuse-audit`.
+
+Five audit deliverables under `docs/architecture/` establish an independent BIMSpend product architecture. They preserve the P0 foundation while replacing the old mandatory-service assumption:
+
+1. `OPEN_SOURCE_REUSE_MATRIX.md`
+2. `TARGET_ARCHITECTURE.md`
+3. `FEATURE_GAP_ANALYSIS.md`
+4. `IMPLEMENTATION_SEQUENCE.md`
+5. `LICENSING_AND_DEPENDENCIES.md`
+
+Pinned evidence:
+- BIMSpend: `03c47f37ff37f0126170305a1c4f220b9ea22a68`.
+- ActivityWatch umbrella: `9fee4702fea08dbe0149cc6e28f4ef66b49f54ec`.
+- ActivityWatch inspected gitlinks include window `10638b2...`, AFK `b483926...`, client `fe10696...`, core `28c3acf...`, server `67cfb47...`, Qt manager `bbccb71...`.
+- Miru: `10e457e1d0cd2ac782be9d1edbcbd5a1a573486a` (`develop`). Miru `main` observed at `e8dddef...` is older/diverged and lacks some inspected features.
+
+Verified static conclusions:
+- Adapt ActivityWatch Windows foreground, idle, privacy and heartbeat code selectively; do not embed aw-server or its separate datastore.
+- Windows screen-lock detection is incomplete upstream and must be built/tested.
+- Port Miru tenancy, policy, audit, rates, timesheet and reporting behavior/tests into native Python; do not require Rails/PostgreSQL/React.
+- Preserve BIMSpend's existing time-state separation, SQLite reliability/migrations, idempotency and reviewed decisions.
+- Authentication remains incomplete because the UI still injects `designer_01`.
+- Budgets are BIMSpend-specific; no first-class Miru budget implementation was found at the pin.
+
+Not validated: upstream runtime/builds, SBOM/CVEs, Windows packaging, actual copied-code legal compliance, live capture/Revit behavior, multi-tenant penetration tests and workplace/privacy legality.
+
+Next exact action after human review: finish P0-009/P0-010 authentication/session/domain authorization, then implement the isolated MPL/provenance boundary before any native capture code.

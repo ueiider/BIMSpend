@@ -29,3 +29,22 @@ Preferred direction: Miru administrative foundation + existing Miru agent API; A
 ## Working rules
 
 Build remains blocked. Update status only with evidence. Use synthetic/test data. Never infer actual or billable time from foreground activity. Do not modify FBT Revit Academy. Tests not executed are marked **NÃO VALIDADO**.
+
+
+## Open-source architecture realignment — 2026-11-05
+
+| ID | Task | Status | Evidence |
+|---|---|---|---|
+| OSA-01 | Verify BIMSpend P0 baseline and prior reuse decisions | DONE (static) | P0 HEAD `03c47f37ff37f0126170305a1c4f220b9ea22a68`; prior reports reconciled |
+| OSA-02 | Resolve ActivityWatch bundle gitlinks and inspect capture/AFK/core/client/server/manager source | DONE (static) | `docs/architecture/OPEN_SOURCE_REUSE_MATRIX.md` |
+| OSA-03 | Inspect Miru company/auth/project/team/timesheet/rate/billing/report source and tests | DONE (static) | pinned Miru `10e457e1d0cd2ac782be9d1edbcbd5a1a573486a` |
+| OSA-04 | Define independent BIMSpend target architecture | DONE (planning) | `TARGET_ARCHITECTURE.md` |
+| OSA-05 | Map current gaps and migration risks | DONE (static/planning) | `FEATURE_GAP_ANALYSIS.md` |
+| OSA-06 | Produce source-specific reuse-first implementation sequence | DONE (planning) | `IMPLEMENTATION_SEQUENCE.md` |
+| OSA-07 | Record licensing/dependency boundaries | DONE (static); legal/SBOM NOT VALIDATED | `LICENSING_AND_DEPENDENCIES.md` |
+
+**Architecture correction:** ActivityWatch and Miru are not mandatory runtime services. BIMSpend owns its collector, idle detection, Revit connector, database and business domain. Bounded ActivityWatch source may be adapted under an explicit MPL boundary; Miru business behavior/tests should primarily be ported to Python.
+
+**Remaining blockers:** legal approval of MPL distribution method; transitive SBOM/vulnerability scans; Windows runtime/package validation; P0-009/P0-010 authentication; tenant migration design; production privacy/workplace review.
+
+**Next exact engineering action:** after owner review, complete P0 authentication/session and domain authorization before adding native background capture. No implementation was authorized or performed by this audit.
