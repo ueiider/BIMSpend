@@ -2,6 +2,7 @@ name: Desktop preview tests
 on:
   push:
     branches:
+      - main
       - work/bimspend-build-integration
   workflow_dispatch:
 
