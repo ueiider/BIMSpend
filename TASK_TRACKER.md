@@ -1,8 +1,8 @@
 # BIMSpend — Task Tracker
 
 Updated: 2026-11-05
-Current phase: **PHASE 1 — PLAN COMPLETE / AWAITING APPROVAL**
-Build status: **BLOCKED — explicit approval required**
+Current phase: **PHASE 1 — PLAN COMPLETE / BUILD 01 AUTHORIZED**
+Build status: **AUTHORIZED — owner approved 2026-11-05; B2-A audit deferred, not passed**
 
 | ID | Task | Status | Evidence / deliverable |
 |---|---|---|---|
@@ -15,8 +15,8 @@ Build status: **BLOCKED — explicit approval required**
 | P1-05 | Compare fork vs API/adapter; compatibility and deployment options | DONE | PLAN_AUDIT_REPORT.md §§6–7 |
 | P1-06 | Threat/privacy/legal risk register and acceptance criteria | DONE (planning) | PLAN_AUDIT_REPORT.md §8; legal compliance NÃO VALIDADO |
 | P1-07 | Produce staged implementation proposal and explicit approval gate | DONE | PLAN_AUDIT_REPORT.md §§9–10 |
-| B2-01 | Run isolated reproducible baseline builds/tests | BLOCKED | Proposed Gate B2-A; only after user approves |
-| B3-01 | Prototype end-to-end event -> project -> manager report | BLOCKED | Proposed Gates B3-A/B3-B; only after later approvals |
+| B2-01 | Run isolated reproducible baseline builds/tests | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; B2-A audit deferred; baseline validation documented in build branch |
+| B3-01 | Prototype end-to-end event -> project -> manager report | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; vertical slice implemented in build branch |
 
 ## Audit conclusion
 

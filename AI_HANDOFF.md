@@ -1,7 +1,7 @@
 # BIMSpend — AI Handoff
 
 Last updated: 2026-11-05
-Mode: **PLAN COMPLETE — AWAITING USER APPROVAL. BUILD BLOCKED.**
+Mode: **BUILD 01 AUTHORIZED (2026-11-05).** Owner approved initial vertical-slice development. Independent B2-A audit deferred, not passed.
 
 ## Read in this order
 
