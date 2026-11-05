@@ -1,0 +1,33 @@
+name: Package Windows synthetic preview
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/Package-BIMSpend.ps1'
+      - 'scripts/preview_entry.py'
+      - 'src/**'
+      - 'data/synthetic/**'
+      - '.github/workflows/windows-preview.yml'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install application and pinned packager
+        run: python -m pip install -e . pyinstaller==6.16.0
+      - name: Build executable folder
+        shell: pwsh
+        run: .\scripts\Package-BIMSpend.ps1
+      - name: Upload synthetic preview folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIMSpend-Windows-Synthetic-Preview
+          path: .preview/dist/BIMSpend/
+          if-no-files-found: error

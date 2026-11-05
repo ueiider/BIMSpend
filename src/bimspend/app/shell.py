@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Any
@@ -24,6 +25,8 @@ from bimspend.dashboard import all_projects_summary
 
 def _fixture(name: str) -> str:
     """Resolve path to a synthetic fixture file."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, "data", "synthetic", name)
     return os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "synthetic", name)
 
 
