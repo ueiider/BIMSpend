@@ -5,7 +5,7 @@ import threading
 import time
 
 from bimspend.db import Database
-from bimspend.models import Project
+from bimspend.models import Project, ActivityEvent, AttributedTime, TimeEntry, TimeEntryState
 
 
 def test_wal_timeout_and_two_connections_preserve_writes(tmp_path):
@@ -59,7 +59,7 @@ def test_version_tracking_preserves_legacy_project(tmp_path):
         db.close()
     reopened = Database(path)
     try:
-        assert reopened.conn.execute("SELECT count(*) FROM schema_version").fetchone()[0] == 1
+        assert reopened.conn.execute("SELECT count(*) FROM schema_version").fetchone()[0] == 2
         assert reopened.get_project("old").name == "Legacy"
     finally:
         reopened.close()
@@ -104,3 +104,26 @@ def test_writer_waits_for_real_sqlite_lock_then_succeeds(tmp_path):
     assert outcome == ["committed"]
     assert {p.id for p in first.list_projects()} == {"first", "second"}
     first.close()
+
+
+def test_archive_roundtrip_and_unique_source_attribution(tmp_path):
+    path = str(tmp_path / "archive.db")
+    db = Database(path)
+    db.upsert_project(Project("p", "Project", "Synthetic", 100, 50))
+    db.ingest_event(ActivityEvent("ev", "synthetic", "source-1", "designer_01", "Revit", "safe",
+                                  "2026-01-01T01:00:00Z", "2026-01-01T01:15:00Z", 15))
+    suggestion = AttributedTime("a", "ev", "p", 15, 1, "manual", is_archived=True)
+    db.upsert_attributed_time(suggestion)
+    entry = TimeEntry("e", "a", "p", "designer_01", 15, state=TimeEntryState.APPROVED, is_archived=True)
+    db.upsert_time_entry(entry)
+    with pytest.raises(sqlite3.IntegrityError):
+        db.upsert_time_entry(TimeEntry("other", "a", "p", "designer_01", 15))
+    assert db.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 2
+    db.close()
+    reopened = Database(path)
+    assert reopened.list_attributed_time()[0].is_archived
+    assert reopened.get_time_entry("e").is_archived
+    assert reopened.get_time_entry("e").state == TimeEntryState.APPROVED
+    assert reopened.conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 2
+    assert reopened.conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    reopened.close()

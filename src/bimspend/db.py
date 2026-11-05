@@ -68,6 +68,11 @@ class Database:
             self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA foreign_keys = ON")
         self._write_depth = 0
+        if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
+            version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+            if version is not None and version > 2:
+                self.conn.close()
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 2")
         self._create_tables()
         self._migrate()
 
@@ -231,6 +236,23 @@ class Database:
         )
         self.conn.execute("INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (?, ?)", (1, _now_iso()))
         self.conn.commit()
+        if self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] < 2:
+            with self.transaction():
+                for table in ("attributed_time", "time_entries"):
+                    cols = {row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+                    if "is_archived" not in cols:
+                        self.conn.execute(f"ALTER TABLE {table} ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0")
+                duplicate = self.conn.execute(
+                    "SELECT attributed_time_id FROM time_entries GROUP BY attributed_time_id HAVING COUNT(*) > 1 LIMIT 1"
+                ).fetchone()
+                if duplicate:
+                    raise RuntimeError("Legacy duplicate time entries require manual reconciliation; no rows were removed")
+                self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_time_entries_attribution ON time_entries(attributed_time_id)")
+                self.conn.execute("CREATE INDEX IF NOT EXISTS ix_attributed_event ON attributed_time(activity_event_id)")
+                self.conn.execute("CREATE INDEX IF NOT EXISTS ix_attributed_project ON attributed_time(project_id)")
+                self.conn.execute("CREATE INDEX IF NOT EXISTS ix_entry_project ON time_entries(project_id)")
+                self.conn.execute("CREATE INDEX IF NOT EXISTS ix_entry_user_state ON time_entries(user_id,state)")
+                self.conn.execute("INSERT INTO schema_version(version,applied_at) VALUES (2,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -414,15 +436,16 @@ class Database:
             """
             INSERT INTO attributed_time
                 (id, activity_event_id, project_id, attributed_minutes,
-                 confidence, correlation_method, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 confidence, correlation_method, created_at, is_archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 activity_event_id=excluded.activity_event_id,
                 project_id=excluded.project_id,
                 attributed_minutes=excluded.attributed_minutes,
                 confidence=excluded.confidence,
                 correlation_method=excluded.correlation_method,
-                created_at=excluded.created_at
+                created_at=excluded.created_at,
+                is_archived=excluded.is_archived
             """,
             (
                 at.id,
@@ -432,6 +455,7 @@ class Database:
                 at.confidence,
                 at.correlation_method,
                 at.created_at or _now_iso(),
+                int(at.is_archived),
             ),
         )
         self._commit()
@@ -452,6 +476,7 @@ class Database:
             confidence=row["confidence"],
             correlation_method=row["correlation_method"],
             created_at=row["created_at"],
+            is_archived=bool(row["is_archived"]),
         )
 
     # ------------------------------------------------------------------
@@ -466,8 +491,8 @@ class Database:
                 (id, attributed_time_id, project_id, user_id, minutes, state,
                  standard_rate, loaded_cost_rate, billed_minutes,
                  review_notes, reviewed_by, reviewed_at,
-                 submitted_by, submitted_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 submitted_by, submitted_at, created_at, is_archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 attributed_time_id=excluded.attributed_time_id,
                 project_id=excluded.project_id,
@@ -482,7 +507,8 @@ class Database:
                 reviewed_at=excluded.reviewed_at,
                 submitted_by=excluded.submitted_by,
                 submitted_at=excluded.submitted_at,
-                created_at=excluded.created_at
+                created_at=excluded.created_at,
+                is_archived=excluded.is_archived
             """,
             (
                 entry.id,
@@ -500,6 +526,7 @@ class Database:
                 entry.submitted_by,
                 entry.submitted_at,
                 entry.created_at or _now_iso(),
+                int(entry.is_archived),
             ),
         )
         if previous is None or (previous.state != entry.state or
@@ -578,6 +605,7 @@ class Database:
             submitted_by=row["submitted_by"],
             submitted_at=row["submitted_at"],
             created_at=row["created_at"],
+            is_archived=bool(row["is_archived"]),
         )
 
     def close(self) -> None:

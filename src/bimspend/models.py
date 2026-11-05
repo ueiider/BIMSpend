@@ -166,6 +166,7 @@ class AttributedTime:
             "confidence": self.confidence,
             "correlation_method": self.correlation_method,
             "created_at": self.created_at,
+            "is_archived": self.is_archived,
         }
 
 
@@ -199,6 +200,7 @@ class TimeEntry:
     submitted_by: Optional[str] = None  # designer who submitted
     submitted_at: Optional[str] = None  # when designer submitted
     created_at: Optional[str] = None
+    is_archived: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
