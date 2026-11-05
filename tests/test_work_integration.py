@@ -106,3 +106,75 @@ def test_desktop_initialization_navigation_seed_and_restart(tmp_path):
         assert (len(app.db.list_events()), len(app.db.list_time_entries())) == counts
     finally:
         app.destroy()
+
+
+def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
+    from tkinter import messagebox, simpledialog
+    monkeypatch.setattr(messagebox, "showinfo", lambda *args: None)
+    monkeypatch.setattr(messagebox, "showerror", lambda *args: (_ for _ in ()).throw(AssertionError(args)))
+    monkeypatch.setattr(messagebox, "askyesno", lambda *args: True)
+    root = tk.Tk()
+    root.withdraw()
+    app = BIMSpendApp(root=root, db_path=str(tmp_path / "actions.db"))
+    try:
+        app.show_screen("projects")
+        screen = app.screens["projects"]
+        original_count = len(app.db.list_projects())
+        from bimspend.app.screens.projects import ProjectDialog
+
+        def make_project(dialog):
+            dialog.name_var.set("Integration Test Project")
+            dialog.client_var.set("Synthetic Client")
+            dialog.rate_var.set("180")
+            dialog.cost_var.set("95")
+            dialog._save()
+
+        root.after(20, lambda: make_project(next(
+            w for w in screen.winfo_children() if isinstance(w, ProjectDialog)
+        )))
+        screen._new_project()
+        added = next(p for p in app.db.list_projects() if p.name == "Integration Test Project")
+        assert len(app.db.list_projects()) == original_count + 1
+        assert added.id.startswith("proj_")
+
+        def edit_project(dialog):
+            dialog.name_var.set("Renamed Integration Project")
+            dialog._save()
+
+        root.after(20, lambda: edit_project(next(
+            w for w in screen.winfo_children() if isinstance(w, ProjectDialog)
+        )))
+        screen._edit_project(added.id)
+        assert app.db.get_project(added.id).name == "Renamed Integration Project"
+        screen._archive_project(added.id)
+        assert app.db.get_project(added.id).is_archived
+        assert app.db.get_project(added.id).name == "Renamed Integration Project"
+        assert all(app.db.get_project(screen.tree.item(i, "tags")[0]).id != added.id for i in screen.tree.get_children())
+
+        app.show_screen("activity_timeline")
+        timeline = app.screens["activity_timeline"]
+        unmatched = next(a for a in app.db.list_attributed_time() if a.project_id is None)
+        item = next(i for i in timeline.tree.get_children() if timeline.tree.item(i, "text") == unmatched.activity_event_id)
+        timeline.tree.selection_set(item)
+        active = next(p for p in app.db.list_projects() if not p.is_archived)
+        monkeypatch.setattr(simpledialog, "askstring", lambda *args: active.id)
+        timeline._assign_selected()
+        assert next(a for a in app.db.list_attributed_time() if a.id == unmatched.id).project_id == active.id
+        entry_id = "entry_" + unmatched.id
+        assert app.db.get_time_entry(entry_id).state == TimeEntryState.PENDING_REVIEW
+
+        app.show_screen("timesheet_review")
+        timesheet = app.screens["timesheet_review"]
+        pending_item = next(i for i in timesheet.pending_tree.get_children() if timesheet.pending_tree.item(i, "text") == entry_id)
+        timesheet.pending_tree.selection_set(pending_item)
+        timesheet._submit_selected()
+        assert app.db.get_time_entry(entry_id).state == TimeEntryState.SUBMITTED
+        submitted_item = next(i for i in timesheet.submitted_tree.get_children() if timesheet.submitted_tree.item(i, "text") == entry_id)
+        timesheet.submitted_tree.selection_set(submitted_item)
+        timesheet._approve_selected()
+        approved = app.db.get_time_entry(entry_id)
+        assert approved.state == TimeEntryState.APPROVED
+        assert approved.billed_minutes == 0
+        assert approved.reviewed_by == "manager_demo"
+    finally:
+        app.destroy()
