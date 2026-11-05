@@ -106,7 +106,7 @@ Synthetic example: actual 12 h, billed 8 h, client rate A$110/h → invoice A$88
 
 ## 9. Current project status
 
-**DISCOVERY — NO MVP APPROVED.** Updated 2026-11-05. This repository is the persistent source of truth, accessible from desktop and mobile via GitHub (private repo `ueiider/BIMSpend`).
+**BUILD 01 AUTHORIZED (2026-11-05).** Owner explicitly authorized initial vertical-slice development. Independent B2-A audit deferred, not passed. Vertical slice uses synthetic data and adapter interfaces; no real employee data, no employee monitoring, no production deployment.
 
 User-stated preferences (not technical approvals): commercial subscription desired; single install deploys PC app and integrations; designers no routine login/manual project selection/timers; auto-start when supported Autodesk applications run; manager access from another computer; not branded Revit-only; GitHub as source of truth; preserve brainstorm rather than prematurely finalize.
 
