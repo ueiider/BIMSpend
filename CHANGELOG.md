@@ -23,3 +23,9 @@ All notable structural and documentation changes are recorded here. This changel
 - Added licensing caveats, component architecture hypothesis, security/privacy checks, mandatory integration tests, and conditional prototype GO / production NO-GO.
 - Updated `CONTEXT_FOR_AI.md` so future agents can resume with the latest findings and mobile dashboard hypothesis.
 - No software installed, code copied, production deployment performed, or MVP approved.
+
+## 2026-11-05 — PLAN-first workflow established
+
+- Added `MASTER_PLAN.md`, `TASK_TRACKER.md`, and `AI_HANDOFF.md` to enforce reuse-first PLAN → approval → BUILD → TEST workflow and conserve paid tokens.
+- Defined phase gates, P1-01 next action, required evidence, manager/designer role hypotheses, and prohibitions on unauthorized implementation.
+- No application code, deployments or integrations changed.
