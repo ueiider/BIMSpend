@@ -146,6 +146,7 @@ class BIMSpendApp:
             ("projects", "Projects", "Projects"),
             ("project_detail", "Project Detail", "Project Details"),
             ("activity_timeline", "Activity Timeline", "Activity Timeline"),
+            ("integrations", "Integrations", "Integrations"),
             ("timesheet_review", "Timesheet Review", "Timesheet Review"),
             ("team", "Team", "Team"),
             ("reports", "Reports", "Reports"),
@@ -190,6 +191,9 @@ class BIMSpendApp:
             self.header, text="Synthetic data — demonstration mode", style="Subtitle.TLabel"
         )
         self.page_subtitle.pack(anchor="w", padx=24, pady=(0, 20))
+        ttk.Label(self.header, text="SYNTHETIC DATA — DEVELOPMENT PREVIEW",
+                  foreground="#9B2C2C", background="#FFFFFF",
+                  font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=24, pady=(0, 8))
 
         # Screen container (pages stack here)
         self.screen_container = ttk.Frame(self.content, style="App.TFrame")
@@ -291,6 +295,9 @@ class BIMSpendApp:
         if screen_id == "activity_timeline":
             from .screens.activity_timeline import ActivityTimelineScreen
             return ActivityTimelineScreen(self.screen_container, self)
+        if screen_id == "integrations":
+            from .screens.integrations import IntegrationsScreen
+            return IntegrationsScreen(self.screen_container, self)
         if screen_id == "timesheet_review":
             from .screens.timesheet_review import TimesheetReviewScreen
             return TimesheetReviewScreen(self.screen_container, self)

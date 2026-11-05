@@ -68,3 +68,28 @@ def test_batch_flows_to_pending_cost_without_destroying_corrections(tmp_path):
     assert db.list_events()[0].window_title != "private title"
     assert ingest_synthetic_batch(db, events, rule) == {"events": 0, "suggestions": 0, "pending_entries": 0}
     assert len(db.list_time_entries()) == 1
+
+
+@pytest.mark.gui
+def test_gui_integrations_import_and_navigation(tmp_path):
+    import tkinter as tk
+    from bimspend.app.shell import BIMSpendApp
+    root = tk.Tk()
+    root.withdraw()
+    app = BIMSpendApp(root=root, db_path=str(tmp_path / "gui-v2.db"))
+    try:
+        app.show_screen("integrations")
+        screen = app.screens["integrations"]
+        screen.load_events()
+        screen.preview()
+        assert "Synthetic preview" in screen.last_result
+        screen.import_events()
+        assert "pending entries" in screen.last_result
+        event_count = len(app.db.list_events())
+        screen.import_events()
+        assert len(app.db.list_events()) == event_count
+        app.show_screen("activity_timeline")
+        app.show_screen("timesheet_review")
+    finally:
+        app.db.close()
+        root.destroy()
