@@ -8,7 +8,7 @@ Decision: **REVIEW REQUIRED — GATE B2-A IS NOT APPROVED**
 
 ## 1. Review scope and evidence chain
 
-This package independently reviews the OpenCode preparation plan against the current planning baseline. No builds, tests, scans, installations or product changes were performed.
+This package independently reviews both OpenCode research reports—the B2-A execution plan and the reuse implementation matrix—against the current planning baseline. No builds, tests, scans, installations or product changes were performed.
 
 ### BIMSpend planning baseline
 
@@ -35,6 +35,15 @@ OpenCode branch and exact head were verified remotely:
 - [OpenCode execution plan](https://github.com/ueiider/BIMSpend/blob/agent/opencode-b2a/docs/agents/opencode/B2A_EXECUTION_PLAN.md)
 
 The OpenCode commit changes only `docs/agents/opencode/B2A_EXECUTION_PLAN.md`. Its parent/base is the same reviewed main baseline. The OpenCode report was not modified.
+
+The reuse-matrix branch and exact head were also verified remotely:
+
+- Branch: `agent/opencode-reuse-matrix`
+- Commit: `b26c6d1a97f270a55d6669916b1369339d1fc98d`
+- [Reuse-matrix commit](https://github.com/ueiider/BIMSpend/commit/b26c6d1a97f270a55d6669916b1369339d1fc98d)
+- [OpenCode reuse implementation matrix](https://github.com/ueiider/BIMSpend/blob/b26c6d1a97f270a55d6669916b1369339d1fc98d/docs/agents/opencode/REUSE_IMPLEMENTATION_MATRIX.md)
+
+That commit changes only `docs/agents/opencode/REUSE_IMPLEMENTATION_MATRIX.md` and is also based on the reviewed `main` baseline. Neither OpenCode report was modified.
 
 ## 2. Consolidated architecture position
 
@@ -94,9 +103,97 @@ The following findings align with the PLAN audit:
 
 The OpenCode report adds useful exact gitlink candidates and manifest-derived prerequisite versions, but those remain plan evidence rather than proof of a successful environment or build.
 
-## 5. Contradictions and corrections required
+## 5. Open-Source Reuse Findings
 
-### 5.1 Command and evidence issues
+Source: [OpenCode reuse implementation matrix at `b26c6d1a97f270a55d6669916b1369339d1fc98d`](https://github.com/ueiider/BIMSpend/blob/b26c6d1a97f270a55d6669916b1369339d1fc98d/docs/agents/opencode/REUSE_IMPLEMENTATION_MATRIX.md). These findings are consolidated with the [B2-A plan at `73e54ab583d76e6f3b018aaeb5449a1c42c91b9a`](https://github.com/ueiider/BIMSpend/blob/73e54ab583d76e6f3b018aaeb5449a1c42c91b9a/docs/agents/opencode/B2A_EXECUTION_PLAN.md).
+
+### 5.1 Architecture implications accepted
+
+The reuse matrix strengthens—but does not yet runtime-validate—the composition architecture:
+
+| Boundary | Reuse conclusion | Work review |
+|---|---|---|
+| Miru business foundation | Strong reuse candidate for users, companies, clients, projects, roles, timesheets, invoices, reports and exports | Preserve. Treat security, tenancy and exact BIMSpend semantics as unvalidated until tested |
+| Miru agent API | Best initial ingestion boundary: Agent/AgentKey, company/user binding, project scope, proof/source metadata and external run/session fields | Preserve. Idempotency uniqueness, device credential hardening and agent-specific rate limiting remain gaps |
+| ActivityWatch local monitoring | Candidate for foreground-window and AFK signals through a loopback API | Preserve local-only separation. Exact pinned-gitlink implementation remains unverified |
+| BIMSpend Windows adapter | No upstream equivalent; correlation, minimization, offline queue, retry and idempotency are custom | Future BUILD only; not B2-A |
+| Read-only Revit connector | No upstream equivalent; versioned .NET builds and event signals are custom | Future BUILD only; not B2-A |
+| Project mapping and metric separation | No upstream implementation proves model-to-commercial-project mapping or observed/approved/billed separation | Future domain design/build; not B2-A |
+
+### 5.2 High-value Miru reuse candidates
+
+Static source evidence supports carrying these into later validation:
+
+- Devise/JWT/MFA/passkey authentication foundation.
+- Rolify/Pundit company- and resource-scoped authorization.
+- Company, client, project, user and project-membership records.
+- Timesheet entries with bill and review states, audit history and automation/proof metadata.
+- Agent/AgentKey ingestion boundary.
+- Existing dashboards, reports, CSV/PDF export and invoice linkage.
+- Desktop timer state as a reference for UI/state patterns.
+
+These are candidates, not blanket “reuse as-is” approvals. The matrix's A/B/C labels express estimated adaptation effort; they do not prove production fitness, tenant isolation, data-model correctness or API compatibility at runtime.
+
+### 5.3 Required corrections to reuse claims
+
+1. **Internal loaded cost is not verified.** `ProfitabilityBillingRate` is evidence of a billing/charge rate, not proof of the employer's loaded internal hourly cost. BIMSpend must keep loaded cost separate and may require a new protected model.
+2. **Offline synchronization is not established.** A `synced_at` field on the desktop timer does not demonstrate a durable encrypted queue, acknowledgements, retries or idempotent replay.
+3. **External IDs are not proven idempotent.** Presence of `external_run_id` and `external_session_id` does not prove unique constraints or replay safety.
+4. **Agent credentials are not yet device credentials.** AgentKey is reusable foundation, but storage, rotation, expiry, device binding, revocation propagation and rate limiting require validation/design.
+5. **Approval workflow needs behavior tests.** A review-status enum does not itself prove the intended designer/manager workflow, audit requirements or separation from billing.
+6. **“Unchanged upstream” is a target, not a fact.** API-first integration is preferred, but the need for narrow Miru extensions cannot be ruled out before contract and runtime tests.
+7. **ActivityWatch details at bundle gitlinks remain unverified.** OpenCode explicitly did not initialize the submodules. Paths, endpoints, privacy filters, port/bind defaults, payloads and packaging behavior cited for those exact gitlinks must be inspected during an approved baseline.
+8. **Local machine inventory is not an execution prerequisite.** Versions and free space observed on `D:` are transient and must not drive the plan; the approved disposable executor manifest is authoritative.
+9. **Optional input monitoring should be excluded by default.** `aw-watcher-input` may be inventoried for license completeness, but its use would increase surveillance scope and is not required for the first product hypothesis.
+
+### 5.4 Gate-scope contradiction
+
+The reuse matrix's implementation priority list is useful for future roadmap planning, but its recommendation to prioritize items 1–8 “upon explicit approval of Gate B2-A” is out of scope. Agent setup, company/project provisioning, ActivityWatch API probing, adapter skeleton work, workflow configuration, billing mapping and dashboard adaptation are not B2-A baseline activities.
+
+Under B2-A, permitted work remains only:
+
+- isolated checkout at pinned revisions;
+- recursive gitlink capture;
+- canonical clean builds/tests;
+- SBOM/license/NOTICE inventory;
+- dependency and security scans;
+- evidence, teardown and stop/go report.
+
+Every integration, configuration against a running service, probe using live watchers, schema/workflow change or BIMSpend implementation requires a later, separately approved gate.
+
+### 5.5 Reconciled reuse classification
+
+| Capability | Consolidated status before B2-A | Reason |
+|---|---|---|
+| Miru company/client/project foundation | REUSE CANDIDATE — high confidence static | Direct source evidence; runtime/tenant tests outstanding |
+| Miru authentication/RBAC | CONFIGURE/ADAPT | Strong components; BIMSpend roles and security tests outstanding |
+| Miru agent timesheet ingestion | CONFIGURE/ADAPT | Best boundary; idempotency/rate-limit/device gaps |
+| Miru timesheet review and billing linkage | CONFIGURE/ADAPT | Existing fields/models; semantics and workflow unverified |
+| Miru reports/export/dashboard | CONFIGURE/ADAPT | Existing features; BIMSpend metrics are not present |
+| Internal loaded cost | BUILD/UNKNOWN | Billing-rate evidence is not loaded-cost evidence |
+| ActivityWatch window/AFK/API | NOT VERIFIED AT PINNED GITLINKS | Submodule source was not initialized by OpenCode |
+| ActivityWatch packaging/autostart/privacy behavior | NOT VERIFIED | Requires exact-gitlink source inspection and approved runtime tests |
+| Durable offline synchronization | BUILD | Neither report proves the required adapter queue/replay contract |
+| Windows adapter | BUILD | No upstream equivalent |
+| Read-only Revit connector | BUILD | No upstream equivalent |
+| Model/project identity mapping | BUILD | BIMSpend-specific |
+| Observed/attributed/approved/billed separation | BUILD/ADAPT MIRU | Domain layer absent; Miru records are downstream targets |
+
+### 5.6 B2-A evidence added by the reuse matrix
+
+The matrix contributes:
+
+- more detailed Miru source paths and candidate capability mapping;
+- a future reuse/adaptation roadmap;
+- a clear admission that ActivityWatch submodule implementation was not read;
+- environment observations that explain why a disposable, provisioned executor is required;
+- confirmation that builds, scans and dependencies were not executed.
+
+It does not close any B2-A runtime acceptance criterion. It adds no clean-build, test, SBOM, license-scan, vulnerability-scan, Windows-packaging or legal evidence.
+
+## 6. Contradictions and corrections required
+
+### 6.1 Command and evidence issues
 
 | OpenCode proposal | Review finding | Required correction before execution |
 |---|---|---|
@@ -111,15 +208,15 @@ The OpenCode report adds useful exact gitlink candidates and manifest-derived pr
 | “Clean teardown: no changes to user's machine” | Installing runtimes/toolchains directly would still change the machine before teardown | Execute in disposable VM/container/managed runner or explicitly approved isolated environment; do not use the user's normal workstation |
 | Commit full copied lockfiles | Duplicates upstream material and may create large/noisy evidence | Prefer SHA-256 hashes, machine-readable SBOMs and concise reports; attach raw logs only when size/privacy policy allows |
 
-### 5.2 Source-reference issue
+### 6.2 Source-reference issue
 
 The OpenCode table cites numbered sections such as “MASTER_PLAN §10/§11/§18”, but the reviewed `MASTER_PLAN.md` is organized by headings and does not contain those numbered sections. The underlying constraints are broadly consistent, but those citations are inaccurate and must not be treated as precise evidence.
 
-### 5.3 Local clone evidence
+### 6.3 Local clone evidence
 
 The OpenCode report cites `D:\BIMSpend\Research\Repos\...` as local verification. Those local clones are not the persistent source of truth and are not independently reproducible evidence. GitHub commits and the future clean B2-A checkout must remain authoritative. No future plan should depend on those paths.
 
-## 6. Missing prerequisites
+## 7. Missing prerequisites
 
 Before B2-A execution can begin, Claude should require explicit resolution of:
 
@@ -138,7 +235,7 @@ Before B2-A execution can begin, Claude should require explicit resolution of:
 13. **Teardown verification:** confirm temporary resources and credentials are removed without deleting unrelated user data.
 14. **Branch ownership:** name the execution branch and reviewer; do not append execution evidence to the immutable OpenCode preparation branch unless explicitly authorized.
 
-## 7. Dependency and licensing risks
+## 8. Dependency and licensing risks
 
 | Risk | Status | Required evidence |
 |---|---|---|
@@ -155,7 +252,7 @@ Before B2-A execution can begin, Claude should require explicit resolution of:
 
 A vulnerability is not a license blocker, and a license concern is not a CVE. Evidence and decisions must keep these categories separate.
 
-## 8. Security and privacy constraints
+## 9. Security and privacy constraints
 
 B2-A may use only public upstream source and synthetic/test configuration. It must not process company spreadsheets, employee/customer identities, Revit journals or production credentials.
 
@@ -175,7 +272,7 @@ Mandatory controls:
 
 Cross-tenant security, agent-token behavior, local event fabrication, Revit performance and workplace surveillance compliance remain outside B2-A and **NOT VALIDATED**.
 
-## 9. Corrected proposed build/test procedure
+## 10. Corrected proposed build/test procedure
 
 This is the procedure Claude should review. It is not authorization to execute.
 
@@ -234,7 +331,7 @@ This is the procedure Claude should review. It is not authorization to execute.
 - Destroy the disposable environment and verify teardown.
 - Produce a B2-A stop/go recommendation. Do not begin B2-B/B3.
 
-## 10. Acceptance criteria
+## 11. Acceptance criteria
 
 B2-A passes only when all mandatory criteria have evidence:
 
@@ -255,7 +352,7 @@ B2-A passes only when all mandatory criteria have evidence:
 
 A partial pass must be reported as partial; it cannot be silently upgraded to GO.
 
-## 11. Explicit stop/go criteria
+## 12. Explicit stop/go criteria
 
 ### STOP immediately
 
@@ -277,7 +374,7 @@ Only if baselines run in the approved matrix, evidence is complete, and remainin
 
 Not available from this package. A separate human decision is required after Claude review and completed B2-A evidence. Passing B2-A does not approve B2-B, B3, production use or deployment.
 
-## 12. Unresolved questions for Claude
+## 13. Unresolved questions for Claude
 
 1. Does Claude agree that B2-A must run in a disposable executor and not the user's normal PC?
 2. Which platform matrix is the minimum meaningful baseline: Linux/container, Windows, or both?
@@ -292,7 +389,7 @@ Not available from this package. A separate human decision is required after Cla
 11. Should the future executor use a new branch such as `agent/executor-b2a` rather than either planning branch?
 12. What exact evidence is required before changing B2-01 from BLOCKED?
 
-## 13. Required human approvals
+## 14. Required human approvals
 
 | Approval | Required before |
 |---|---|
@@ -303,9 +400,9 @@ Not available from this package. A separate human decision is required after Cla
 | Australian employment/privacy legal review | Any real employee monitoring or pilot |
 | Separate user approval | B2-B, B3, production deployment or product implementation |
 
-## 14. Recommendation to Claude
+## 15. Recommendation to Claude
 
-Review this package and the unchanged OpenCode plan. Claude should return one of:
+Review this package and both unchanged OpenCode reports. Claude should return one of:
 
 - **PLAN ACCEPTED WITH CORRECTIONS:** approve a corrected B2-A execution specification for later human approval;
 - **PLAN REVISION REQUIRED:** identify exact missing commands/policies/evidence;
@@ -313,7 +410,7 @@ Review this package and the unchanged OpenCode plan. Claude should return one of
 
 Claude must not approve or execute B2-A on behalf of the user. The recommended next action after Claude's review is a short, corrected B2-A runbook and an explicit user approval request for B2-A only.
 
-## 15. Current blocker statement
+## 16. Current blocker statement
 
 B2-A remains **BLOCKED**. The immediate blockers are:
 
@@ -322,6 +419,9 @@ B2-A remains **BLOCKED**. The immediate blockers are:
 3. no pinned SBOM/scanner toolchain;
 4. no explicit license and vulnerability decision policies;
 5. several OpenCode commands require correction before they are reproducible;
-6. runtime builds, tests, scans and legal conclusions remain **NOT VALIDATED**.
+6. ActivityWatch implementation details at the pinned gitlinks remain unverified because submodules were not initialized;
+7. loaded internal cost, general offline sync and ingestion idempotency are not proven by the cited Miru fields;
+8. the reuse matrix's future implementation priorities must not be executed inside B2-A;
+9. runtime builds, tests, scans and legal conclusions remain **NOT VALIDATED**.
 
 **END — STOP AFTER REVIEW PACKAGE**
