@@ -125,3 +125,7 @@ The user liked the Miru dashboard and asked whether existing open-source softwar
 Preliminary legal/technical conclusion: **YES to evaluating and prototyping** Miru (MIT) and ActivityWatch (MPL-2.0), observing their license terms; **NO production readiness or combined-stack compatibility has been established**. GPL/AGPL competitors are useful references but require separate licensing review if incorporated. No code checkout, runtime integration, dependency/security audit, or live Revit test has occurred in this chat. Do not claim otherwise.
 
 Read the complete assessment, risks, open questions, and mandatory validation checklist in `docs/technical-feasibility/miru-activitywatch-revit-candidate-assessment-2026-11-05.md`. Keep billed hours distinct from observed/actual hours and internal loaded costs. No product MVP approved. The user requested that these findings be committed to GitHub.
+
+## 13. Planning controls (2026-11-05)
+
+The user explicitly requested a **PLAN-first, token-conscious, reuse-first** workflow before any BUILD. Three root files now govern work: `MASTER_PLAN.md`, `TASK_TRACKER.md`, `AI_HANDOFF.md`. The next task is **P1-01**: pin Miru/ActivityWatch upstream revisions and inspect licenses/dependencies in PLAN mode. **No implementation approved.** Do not start BUILD automatically. Manager-only full functions; designers may see own history and timelog assistance, as provisional role split. Record results in GitHub and seek approval at each build gate.
