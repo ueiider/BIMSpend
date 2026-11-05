@@ -16,3 +16,8 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+
+[tool.pytest.ini_options]
+markers = ["gui: real Tkinter integration tests (separate process on Windows CI)"]

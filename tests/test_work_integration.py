@@ -82,6 +82,7 @@ def test_designer_submit_manager_approval_and_explicit_billing(tmp_path):
     db.close()
 
 
+@pytest.mark.gui
 def test_desktop_initialization_navigation_seed_and_restart(tmp_path):
     path = str(tmp_path / "desktop.db")
     root = tk.Tk()
@@ -108,6 +109,7 @@ def test_desktop_initialization_navigation_seed_and_restart(tmp_path):
         app.destroy()
 
 
+@pytest.mark.gui
 def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
     from tkinter import messagebox, simpledialog
     monkeypatch.setattr(messagebox, "showinfo", lambda *args: None)

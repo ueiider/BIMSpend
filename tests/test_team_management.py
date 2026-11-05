@@ -26,6 +26,7 @@ def test_roster_assignments_rates_and_status_persist(tmp_path):
     db.close()
 
 
+@pytest.mark.gui
 def test_team_screen_can_open_and_refresh(tmp_path):
     import tkinter as tk
     from bimspend.app.shell import BIMSpendApp
