@@ -42,3 +42,22 @@ def test_startup_without_external_adapter_modules(tmp_path, monkeypatch):
     finally:
         app.db.close()
         root.destroy()
+
+
+def test_version_tracking_preserves_legacy_project(tmp_path):
+    path = str(tmp_path / "legacy.db")
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, client TEXT NOT NULL, standard_rate REAL NOT NULL, loaded_cost_rate REAL NOT NULL, is_billable INTEGER NOT NULL, created_at TEXT NOT NULL)")
+        conn.execute("INSERT INTO projects VALUES ('old','Legacy','Synthetic',90,45,1,'2026-01-01T00:00:00Z')")
+    db = Database(path)
+    try:
+        assert db.get_project("old").name == "Legacy"
+        assert db.conn.execute("SELECT version FROM schema_version").fetchall()[0][0] == 1
+    finally:
+        db.close()
+    reopened = Database(path)
+    try:
+        assert reopened.conn.execute("SELECT count(*) FROM schema_version").fetchone()[0] == 1
+        assert reopened.get_project("old").name == "Legacy"
+    finally:
+        reopened.close()

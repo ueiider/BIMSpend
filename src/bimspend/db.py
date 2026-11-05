@@ -185,6 +185,10 @@ class Database:
                 "ALTER TABLE time_entries ADD COLUMN submitted_at TEXT"
             )
 
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        self.conn.execute("INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES (?, ?)", (1, _now_iso()))
         self.conn.commit()
 
     # ------------------------------------------------------------------
