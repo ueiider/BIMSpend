@@ -21,7 +21,13 @@ from bimspend.models import (  # noqa: E402
     TimeEntry,
     TimeEntryState,
 )
-from bimspend.review import approve_entry, reject_entry, suggest_entry  # noqa: E402
+from bimspend.review import (  # noqa: E402
+    approve_entry,
+    bill_entry,
+    reject_entry,
+    submit_entry,
+    suggest_entry,
+)
 
 
 _SCRATCH_DB = "test_bimspend_scratch.db"
@@ -77,12 +83,19 @@ def test_observed_vs_attributed_vs_approved_are_separate():
 
         # Approved time entry: designer reviews suggested 110 minutes and
         # adjusts down to 100 (designer modifies, not auto-accepted).
+        # Workflow: pending_review -> submitted (designer) -> approved (manager)
+        db.upsert_attributed_time(attributed)  # persist before FK reference
         entry = suggest_entry(attributed, project, "designer_01")
         entry.minutes = 100.0  # designer modifies suggested hours
-        entry = approve_entry(entry, reviewed_by="designer_01", billed_minutes=80.0)
+        submit_entry(entry, submitted_by="designer_01")
+        db.upsert_time_entry(entry)
+        entry = approve_entry(entry, reviewed_by="manager_01")
+        db.upsert_time_entry(entry)
+        # Billing is a SEPARATE explicit action — NOT automatic
+        entry = bill_entry(entry, billed_minutes=80.0, reviewed_by="manager_01")
         db.upsert_time_entry(entry)
         stored_entry = db.get_time_entry(entry.id)
-        assert stored_entry.state == TimeEntryState.APPROVED
+        assert stored_entry.state == TimeEntryState.BILLED
         assert stored_entry.minutes == 100.0
         assert stored_entry.billed_minutes == 80.0
 
@@ -189,7 +202,9 @@ def test_labor_cost_and_standard_value_are_separate():
         )
         db.upsert_attributed_time(attributed)  # persist before FK reference
         entry = suggest_entry(attributed, project, "designer_01")
-        entry = approve_entry(entry, reviewed_by="designer_01")
+        submit_entry(entry, submitted_by="designer_01")
+        db.upsert_time_entry(entry)
+        entry = approve_entry(entry, reviewed_by="manager_01")
         db.upsert_time_entry(entry)
 
         stored = db.get_time_entry(entry.id)

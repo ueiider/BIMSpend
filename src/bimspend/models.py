@@ -14,15 +14,26 @@ from typing import Any, Optional
 
 
 class TimeEntryState(Enum):
-    """Review states for a time entry.
+    """Review and billing states for a time entry.
 
-    pending_review  -> designer has not yet reviewed the suggested hours
-    approved        -> designer approved the attributed hours
-    rejected        -> designer rejected the attributed hours
+    State machine (each transition has its own actor and audit record):
+
+    pending_review  -> designer has not yet reviewed suggested hours
+    submitted       -> designer has reviewed and submitted for manager approval
+    approved        -> manager has approved (NOT billed)
+    rejected        -> manager returned for correction, or designer rejected
+    billed          -> time has been invoiced (separate explicit action)
+
+    Designer owns: pending_review -> submitted
+    Manager owns:  submitted -> approved/rejected
+    Billing owns:  approved -> billed (never automatic)
     """
+
     PENDING_REVIEW = "pending_review"
+    SUBMITTED = "submitted"
     APPROVED = "approved"
     REJECTED = "rejected"
+    BILLED = "billed"
 
 
 @dataclass
@@ -67,6 +78,9 @@ class ActivityEvent:
 
     This is *observed attention*, not productive effort. It is treated as
     untrusted input until correlated and reviewed.
+
+    Privacy: window_title may be redacted/hashed per privacy policy. The
+    raw title must never be stored in plain text for employee data.
     """
 
     id: str
@@ -74,13 +88,14 @@ class ActivityEvent:
     external_id: str  # idempotency key from the source system
     user_id: str
     app_name: str
-    window_title: str
+    window_title: str  # may be privacy-redacted (see privacy_filter)
     started_at: str  # ISO-8601
     ended_at: str  # ISO-8601
     duration_minutes: float
     is_afk: bool = False
     event_type: str = "active_window"
     raw_payload: Optional[dict[str, Any]] = None
+    title_redacted: bool = False  # True if window_title was privacy-redacted
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -96,6 +111,7 @@ class ActivityEvent:
             "is_afk": self.is_afk,
             "event_type": self.event_type,
             "raw_payload": self.raw_payload,
+            "title_redacted": self.title_redacted,
         }
 
     @classmethod
@@ -113,6 +129,7 @@ class ActivityEvent:
             is_afk=bool(data.get("is_afk", False)),
             event_type=data.get("event_type", "active_window"),
             raw_payload=data.get("raw_payload"),
+            title_redacted=bool(data.get("title_redacted", False)),
         )
 
 
@@ -122,14 +139,15 @@ class AttributedTime:
 
     The correlation layer assigns an observed activity event to a project
     with a confidence score. This is a *suggestion* pending designer review.
+    Uncorrelated/ambiguous events remain unassigned (no project_id match).
     """
 
     id: str
     activity_event_id: str
-    project_id: str
+    project_id: str | None  # None = unassigned/ambiguous
     attributed_minutes: float
     confidence: float  # 0.0 to 1.0
-    correlation_method: str  # e.g. "window_title_match", "user_assignment"
+    correlation_method: str  # e.g. "window_title_match", "user_assignment", "unassigned"
     created_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -146,11 +164,17 @@ class AttributedTime:
 
 @dataclass
 class TimeEntry:
-    """Designer-reviewed time entry.
+    """Designer-reviewed / manager-approved time entry.
 
     The source of truth for billing/cost decisions. Distinct from observed
-    activity and attributed time. States: pending_review / approved /
-    rejected.
+    activity and attributed time.
+
+    States:
+      pending_review  -> designer has not yet reviewed suggested hours
+      submitted       -> designer submitted for manager approval
+      approved        -> manager approved (NOT automatically billed)
+      rejected        -> returned for correction
+      billed          -> invoiced to client (separate explicit action)
     """
 
     id: str
@@ -161,10 +185,12 @@ class TimeEntry:
     state: TimeEntryState = TimeEntryState.PENDING_REVIEW
     standard_rate: float = 0.0  # snapshot of project rate at review
     loaded_cost_rate: float = 0.0  # snapshot of loaded cost at review
-    billed_minutes: float = 0.0  # hours invoiced to client (may differ)
+    billed_minutes: float = 0.0  # hours invoiced to client (may differ from minutes)
     review_notes: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None  # ISO-8601
+    submitted_by: Optional[str] = None  # designer who submitted
+    submitted_at: Optional[str] = None  # when designer submitted
     created_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -181,6 +207,8 @@ class TimeEntry:
             "review_notes": self.review_notes,
             "reviewed_by": self.reviewed_by,
             "reviewed_at": self.reviewed_at,
+            "submitted_by": self.submitted_by,
+            "submitted_at": self.submitted_at,
             "created_at": self.created_at,
         }
 
@@ -199,6 +227,8 @@ class TimeEntry:
             review_notes=data.get("review_notes"),
             reviewed_by=data.get("reviewed_by"),
             reviewed_at=data.get("reviewed_at"),
+            submitted_by=data.get("submitted_by"),
+            submitted_at=data.get("submitted_at"),
             created_at=data.get("created_at"),
         )
 
@@ -219,3 +249,15 @@ class TimeEntry:
     @property
     def is_billed(self) -> bool:
         return self.billed_minutes > 0
+
+    @property
+    def is_submitted(self) -> bool:
+        return self.state == TimeEntryState.SUBMITTED
+
+    @property
+    def is_pending_review(self) -> bool:
+        return self.state == TimeEntryState.PENDING_REVIEW
+
+    @property
+    def is_rejected(self) -> bool:
+        return self.state == TimeEntryState.REJECTED

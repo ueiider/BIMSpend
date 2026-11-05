@@ -3,10 +3,18 @@
 Provides a small, dependency-free data store for the vertical slice. All
 writes use parameterised queries. The activity_events table carries a
 UNIQUE(source, external_id) constraint to enforce idempotent ingestion.
+
+Schema versions:
+  v1: Initial Build 01 schema (projects, activity_events, attributed_time,
+      time_entries with basic columns).
+  v2: Build 01+ fixes — added submitted_by/submitted_at to time_entries,
+      title_redacted to activity_events, made attributed_time.project_id
+      nullable for unassigned/ambiguous events.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -25,6 +33,15 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _hash_title(title: str) -> str:
+    """Privacy hash for window titles that should not be stored in plain text.
+
+    Returns a deterministic short hash so titles can be grouped without
+    exposing sensitive text.
+    """
+    return f"[HASH:{hashlib.sha256(title.encode('utf-8')).hexdigest()[:8]}]"
+
+
 class Database:
     """SQLite-backed store for projects, activity events, attributed time
     and time entries."""
@@ -35,6 +52,7 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self._create_tables()
+        self._migrate()
 
     def _create_tables(self) -> None:
         self.conn.executescript(
@@ -62,13 +80,14 @@ class Database:
                 is_afk INTEGER NOT NULL DEFAULT 0,
                 event_type TEXT NOT NULL,
                 raw_payload TEXT,
+                title_redacted INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(source, external_id)
             );
 
             CREATE TABLE IF NOT EXISTS attributed_time (
                 id TEXT PRIMARY KEY,
                 activity_event_id TEXT NOT NULL REFERENCES activity_events(id),
-                project_id TEXT NOT NULL REFERENCES projects(id),
+                project_id TEXT REFERENCES projects(id),
                 attributed_minutes REAL NOT NULL,
                 confidence REAL NOT NULL,
                 correlation_method TEXT NOT NULL,
@@ -88,10 +107,43 @@ class Database:
                 review_notes TEXT,
                 reviewed_by TEXT,
                 reviewed_at TEXT,
+                submitted_by TEXT,
+                submitted_at TEXT,
                 created_at TEXT NOT NULL
             );
             """
         )
+        self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Apply schema migrations for existing databases.
+
+        Adds columns that didn't exist in earlier Build 01 schema versions.
+        Safe to run repeatedly (IF NOT EXISTS style via PRAGMA table_info).
+        """
+        # activity_events: add title_redacted if missing
+        cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(activity_events)")}
+        if "title_redacted" not in cols:
+            self.conn.execute(
+                "ALTER TABLE activity_events ADD COLUMN title_redacted INTEGER NOT NULL DEFAULT 0"
+            )
+
+        # attributed_time: make project_id nullable (already nullable in v2,
+        # but older v1 may have NOT NULL). SQLite can't alter column nullability
+        # easily, so we just ensure new inserts can be NULL.
+        # No-op for SQLite; project_id column already allows NULL in v2 DDL.
+
+        # time_entries: add submitted_by/submitted_at if missing
+        cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(time_entries)")}
+        if "submitted_by" not in cols:
+            self.conn.execute(
+                "ALTER TABLE time_entries ADD COLUMN submitted_by TEXT"
+            )
+        if "submitted_at" not in cols:
+            self.conn.execute(
+                "ALTER TABLE time_entries ADD COLUMN submitted_at TEXT"
+            )
+
         self.conn.commit()
 
     # ------------------------------------------------------------------
@@ -156,8 +208,8 @@ class Database:
                 INSERT INTO activity_events
                     (id, source, external_id, user_id, app_name, window_title,
                      started_at, ended_at, duration_minutes, is_afk,
-                     event_type, raw_payload)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     event_type, raw_payload, title_redacted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.id,
@@ -172,6 +224,7 @@ class Database:
                     1 if event.is_afk else 0,
                     event.event_type,
                     json.dumps(event.raw_payload) if event.raw_payload else None,
+                    1 if event.title_redacted else 0,
                 ),
             )
             self.conn.commit()
@@ -207,10 +260,11 @@ class Database:
             is_afk=bool(row["is_afk"]),
             event_type=row["event_type"],
             raw_payload=json.loads(row["raw_payload"]) if row["raw_payload"] else None,
+            title_redacted=bool(row["title_redacted"]),
         )
 
     # ------------------------------------------------------------------
-    # Attributed time
+    # Attributed time (project_id may be NULL for unassigned events)
     # ------------------------------------------------------------------
     def upsert_attributed_time(self, at: AttributedTime) -> None:
         self.conn.execute(
@@ -230,7 +284,7 @@ class Database:
             (
                 at.id,
                 at.activity_event_id,
-                at.project_id,
+                at.project_id,  # may be None for unassigned
                 at.attributed_minutes,
                 at.confidence,
                 at.correlation_method,
@@ -250,7 +304,7 @@ class Database:
         return AttributedTime(
             id=row["id"],
             activity_event_id=row["activity_event_id"],
-            project_id=row["project_id"],
+            project_id=row["project_id"],  # may be None
             attributed_minutes=row["attributed_minutes"],
             confidence=row["confidence"],
             correlation_method=row["correlation_method"],
@@ -266,8 +320,9 @@ class Database:
             INSERT INTO time_entries
                 (id, attributed_time_id, project_id, user_id, minutes, state,
                  standard_rate, loaded_cost_rate, billed_minutes,
-                 review_notes, reviewed_by, reviewed_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 review_notes, reviewed_by, reviewed_at,
+                 submitted_by, submitted_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 attributed_time_id=excluded.attributed_time_id,
                 project_id=excluded.project_id,
@@ -280,6 +335,8 @@ class Database:
                 review_notes=excluded.review_notes,
                 reviewed_by=excluded.reviewed_by,
                 reviewed_at=excluded.reviewed_at,
+                submitted_by=excluded.submitted_by,
+                submitted_at=excluded.submitted_at,
                 created_at=excluded.created_at
             """,
             (
@@ -295,6 +352,8 @@ class Database:
                 entry.review_notes,
                 entry.reviewed_by,
                 entry.reviewed_at,
+                entry.submitted_by,
+                entry.submitted_at,
                 entry.created_at or _now_iso(),
             ),
         )
@@ -318,6 +377,21 @@ class Database:
             ).fetchall()
         return [self._row_to_entry(r) for r in rows]
 
+    def list_time_entries_by_user(
+        self, user_id: str, state: TimeEntryState | None = None
+    ) -> list[TimeEntry]:
+        if state:
+            rows = self.conn.execute(
+                "SELECT * FROM time_entries WHERE user_id = ? AND state = ? ORDER BY created_at",
+                (user_id, state.value),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM time_entries WHERE user_id = ? ORDER BY created_at",
+                (user_id,),
+            ).fetchall()
+        return [self._row_to_entry(r) for r in rows]
+
     @staticmethod
     def _row_to_entry(row: sqlite3.Row) -> TimeEntry:
         return TimeEntry(
@@ -333,6 +407,8 @@ class Database:
             review_notes=row["review_notes"],
             reviewed_by=row["reviewed_by"],
             reviewed_at=row["reviewed_at"],
+            submitted_by=row["submitted_by"],
+            submitted_at=row["submitted_at"],
             created_at=row["created_at"],
         )
 
