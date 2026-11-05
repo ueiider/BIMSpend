@@ -16,7 +16,7 @@ This specification reconciles:
 
 This is a product/UI specification, not an implementation, API contract, legal/privacy approval, or claim of feature availability. OpenCode owns the foundation implementation; Claude/FCC owns integration contracts. Work defines UI requirements and handoff criteria without implementing their assignments. The independent B2-A audit remains deferred.
 
-**Current branch snapshot:** `build/opencode-bimspend-foundation` was not present in remote branch listing at the time checked. `build/claude-integration-contracts` exists at the same SHA as `main` and contains no changes. These designs therefore do not presume their implementation choices or contract schemas.
+**Current branch snapshot (reviewed 2026-11-05):** OpenCode Build 01 is at `87d0eb107371a5f882f80914caf2fa343489c6f3`, three commits ahead of `main`; the vertical slice currently has Python domain/persistence/adapters/correlation/review/CLI dashboard, synthetic fixtures and seven tests. Work inspected source and test files but did not execute them: test status **NOT VALIDATED**. Claude's `build/claude-integration-contracts` still points to the same `main` SHA and has no published contract changes. Specific compatibility findings and UI implications are recorded in §10.
 
 ## 2. Product experience principles
 
@@ -332,7 +332,7 @@ Before implementing a screen:
 7. Add tests for permissions, state labels, empty/loading/error/offline, privacy redaction and time-state separation.
 8. Document any gap as blocked or proposed; don't substitute guessed values.
 
-**Do not implement all nine screens as fully functional now.** Start with the local synthetic event-to-review path and shell; layer later screens onto verified business APIs and approved policies.
+**Do not implement all nine screens as fully functional now.** OpenCode's current vertical slice is a terminal runner, not a graphical app. Start the graphical work with a local synthetic event-to-review screen and minimal shell; keep Projects and Overview read-only fixture views only if they directly support that flow. Layer later screens onto verified business APIs and approved policies.
 
 ## 11. Screen inventory quick reference
 
@@ -351,3 +351,22 @@ Before implementing a screen:
 ## 12. Decision boundary
 
 The wireframes and screen requirements are conceptual. They do not make the brainstormed dashboard, monitoring model, pricing, hosting, mobile support, or historical estimate functionality approved or implemented. Development authorization does not authorize employee monitoring, deployment, production use, or a claim that B2-A passed.
+
+### 10.1 Integration review against OpenCode Build 01
+
+At reviewed OpenCode head `87d0eb107371a5f882f80914caf2fa343489c6f3` (compare base `eb13fc90eb768080f6790bb364b482274860688c`), the foundation supplies a CLI demo and domain services, not the nine GUI screens. The latest commit `87d0eb1` removes four indexed Python bytecode artifacts. The preceding Build 01 commit `a038f506f03e7ac8e6d71569e1bf181d75c4840c` adds the first runnable slice; its predecessor `43ec24e60c859ce9d22492aecbecf15d7ad8e39b` records the owner authorization. No merge is implied.
+
+**Actionable UI/data compatibility findings (reviewed from source; tests not executed):**
+
+1. **Approval-state mismatch — BLOCKER for Timesheet Review UI.** `TimeEntryState.APPROVED` is currently produced by the designer review helper and the dashboard calls those entries “approved.” Product experience requires designer-confirmed/submitted time to remain distinct from manager-approved time. UI must not label the current state as manager approval. Claude's contract should define each actor/state before a manager review screen consumes it.
+2. **Approval silently sets billed minutes — BLOCKER for financial UI.** `approve_entry()` defaults `billed_minutes` to entry minutes. This couples approval and billing, contrary to the financial-state separation. Costs and Reports screens must remain hidden/disabled until explicit billed-state semantics are agreed and the foundation is decoupled.
+3. **Fallback attribution can silently assign a project — BLOCKER for Activity Timeline.** `correlate_events()` falls back to the first project when a user ID is supplied. Low-confidence and ambiguous events must stay unassigned; require an explicit user-confirm action and expose confidence/provenance.
+4. **Raw titles are stored — PRIVACY GATE.** `ActivityEvent` and SQLite store `window_title`/raw payload. This is synthetic-only today. Timeline must never render or transmit unredacted title/path by default; future real-source adapters need local allowlist/redaction and retention controls before any session capture.
+5. **Project observed-time aggregation is inconsistent — DATA BUG TO RESOLVE.** In `runner.py`, the user-keyed raw event totals are not used; project summaries receive correlated minutes as their “observed” minutes. Do not render observed-versus-attributed comparisons from this output until aggregation is corrected and covered by tests.
+6. **Miru project-read assumption — CONTRACT GAP.** `MiruProjectAdapter` describes the agent ingestion endpoint as an integration boundary, while the pinned Miru agent capability is write-only “time create.” Project listing requires a separately specified authorized read path; do not wire project UI to the agent-ingestion endpoint.
+7. **No Revit connector or GUI exists in Build 01.** Revit-specific timeline lanes, project mapping, manager review and all nine screens are design requirements only. The synthetic ActivityWatch-shaped JSON is a fixture schema, not a verified upstream ActivityWatch payload.
+8. **Persistence is plain local SQLite.** This is acceptable only for synthetic development fixtures in the current slice. Do not present it as encrypted offline storage or put employee/business data into it.
+
+**Current test inventory:** Three test files are present (attribution, duplicate-event ingestion, and time-state/financial separation), with seven test functions according to source. Coverage is limited: no GUI/accessibility tests, no explicit submitted-vs-manager-approved test, no “approval does not bill” test, no ambiguous-project abstention test, no raw-title redaction test, no observed-total aggregation test, no Miru read-contract test, and no Revit/read-only tests. This is a source inventory only; execution and pass/fail status remain **NOT VALIDATED** by Work.
+
+**Next UI handoff:** OpenCode can keep owning foundation behavior. Work's first UI slice is a view over existing synthetic models, with status labels corrected to “Observed”, “Suggested”, and “Designer confirmed” until the contract adds separately defined submission and manager-approval states. The UI should abstain from showing billing/cost analytics until item 2 is resolved. Claude should publish the actual contract files/examples before field names or state names are bound in UI code.
