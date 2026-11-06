@@ -23,6 +23,7 @@ SH-001/SH-002/SH-003 security hardening was completed on branch `build/bimspend-
 R1-01/R1-02/R1-03 native Windows capture was completed on branch `build/bimspend-r1-native-capture`. All 88 domain tests and 7 GUI tests pass. Schema migrated to v6 (activity_events.company_id). ActivityWatch-derived source (MPL-2.0) adapted for windows.py, privacy_filter.py, watcher_main.py. Capture controller, AFK detector, session lock detector, and heartbeat manager implemented. Source manifest at docs/open-source/ACTIVITYWATCH_SOURCE_MANIFEST.md. Final commit `70d4074fc82853a0a80b9d375c691cbc70f0f303`.
 
 R1-04 native Revit activity detection and project correlation was completed on branch `build/bimspend-r1-04-revit-correlation`. All 126 domain tests and 45 GUI+capture tests pass. Schema migrated to v7 (revit_sessions, revit_documents, revit_document_mappings, revit_correlation_evidence). Revit connector, IPC channel, and correlation engine implemented. Final commit `8be6e927808c4a76063ea9f7bfc4ab49b0aada98`.
+R1-05 automatic time entry suggestion engine was completed on branch `build/bimspend-r1-05-timesheet-suggestions`. All 139 domain tests and 58 GUI+capture tests pass. Schema migrated to v8 (time_entry_suggestions table). SuggestionEngine, SuggestionConfig, TimeEntrySuggestion implemented with deterministic ID generation, company-scoped authorization, and submit/reject workflow. Final commit `68ca19c6041ccaee4200a26ae9f468d87c863bfa`.
 
 Pinned primary revisions:
 

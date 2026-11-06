@@ -1,9 +1,9 @@
 # R1 Native Capture — Implementation Checkpoint
 
-- Branch: `build/bimspend-r1-04-revit-correlation` (created from `build/bimspend-r1-native-capture` at `59d5dd259dcc57538a1211ce808b005245aebbdf`)
+- Branch: `build/bimspend-r1-05-timesheet-suggestions` (created from `build/bimspend-r1-04-revit-correlation` at `842ae0cbaa667a2f1aece0bfd60c24b4c013418a`)
 - Base main: `65e344b340967108e35e54721d76ec223f8769e0`
-- Status: R1-01/R1-02/R1-03 complete, R1-04 complete. All 126 domain tests + 45 GUI+capture tests pass.
-- Schema version: v7 (revit_sessions, revit_documents, revit_document_mappings, revit_correlation_evidence).
+- Status: R1-01/R1-02/R1-03 complete, R1-04 complete, R1-05 complete. All 139 domain tests + 58 GUI+capture tests pass.
+- Schema version: v8 (time_entry_suggestions table).
 
 ## R1-01 — ActivityWatch Source Provenance
 
@@ -50,9 +50,23 @@
   - Company-scoped tenancy isolation
 - Database v7 migration: 4 new tables + 9 indexes
 
+## R1-05 — Automatic Time Entry Suggestions & Designer Review
+
+- `src/bimspend/capture/suggestion_engine.py` — Session-based suggestion engine
+  - Groups consecutive same-project observations into suggestions
+  - Excludes AFK and locked-session intervals
+  - Company-scoped, idempotent generation
+  - Deterministic ID generation from input data
+  - Confidence levels: CONFIRMED, HIGH, MEDIUM, LOW, UNASSIGNED
+- `src/bimspend/models.py` — TimeEntrySuggestion dataclass, SuggestionState enum
+- `src/bimspend/db.py` — v8 migration: time_entry_suggestions table + indexes
+- Database methods: upsert_suggestion, get_suggestion, list_suggestions
+- Domain actions: submit_suggestion, reject_suggestion
+- Tests: `tests/capture/test_suggestion_engine.py` — 13 tests
+
 ## SQLite Integration
 
-- v7 migration: Revit tables + indexes
+- v8 migration: time_entry_suggestions table + 4 indexes
 - WAL mode, busy timeout, transaction safety preserved
 - Idempotent ingestion via UNIQUE(source, external_id)
 
@@ -60,12 +74,13 @@
 
 - `tests/capture/test_capture_module.py` — 29 tests (capture module)
 - `tests/capture/test_correlation.py` — 9 tests (correlation engine)
-- 126 domain tests pass (97 original + 29 capture)
-- 45 GUI+capture tests pass (7 GUI + 38 capture)
+- `tests/capture/test_suggestion_engine.py` — 13 tests (suggestion engine)
+- 139 domain tests pass
+- 58 GUI+capture tests pass
 
 ## CI
 
-- `.github/workflows/preview-tests.yml` — includes `build/bimspend-r1-04-revit-correlation`
+- `.github/workflows/preview-tests.yml` — includes `build/bimspend-r1-05-timesheet-suggestions`
 
 ## Remaining Limitations
 
@@ -76,5 +91,4 @@
 
 ## Next Implementation Action
 
-R1-05 — Turn attributed activity into user-reviewable timesheet suggestions
-(correlation evidence → suggested time entries → designer review workflow)
+R1-05 is complete. Next milestone: R1-06 — Timesheet Review GUI & Manager Approval UI (designer review screens, manager approval dashboard, submission workflow UI).
