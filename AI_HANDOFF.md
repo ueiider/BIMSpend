@@ -1,6 +1,6 @@
 # BIMSpend — AI Handoff
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 Mode: **BUILD 01 AUTHORIZED (2026-11-05).** Owner approved initial vertical-slice development. Independent B2-A audit deferred, not passed.
 
 ## Read in this order
@@ -24,6 +24,8 @@ R1-01/R1-02/R1-03 native Windows capture was completed on branch `build/bimspend
 
 R1-04 native Revit activity detection and project correlation was completed on branch `build/bimspend-r1-04-revit-correlation`. All 126 domain tests and 45 GUI+capture tests pass. Schema migrated to v7 (revit_sessions, revit_documents, revit_document_mappings, revit_correlation_evidence). Revit connector, IPC channel, and correlation engine implemented. Final commit `8be6e927808c4a76063ea9f7bfc4ab49b0aada98`.
 R1-05 automatic time entry suggestion engine was completed on branch `build/bimspend-r1-05-timesheet-suggestions`. All 139 domain tests and 58 GUI+capture tests pass. Schema migrated to v8 (time_entry_suggestions table). SuggestionEngine, SuggestionConfig, TimeEntrySuggestion implemented with deterministic ID generation, company-scoped authorization, and submit/reject workflow. Final commit `68ca19c6041ccaee4200a26ae9f468d87c863bfa`.
+
+R1-06 designer review and manager approval UI was completed on branch `build/bimspend-r1-06-review-approval-ui`. All 146 domain tests pass. Schema migrated to v9 (suggestion_decisions audit table). SuggestionService domain service with submit/approve/reject/return_for_correction/split/merge operations. DesignerReviewScreen and ManagerApprovalScreen added to the application shell navigation. Final commit `0ae3d9895fc8b73240851012eb0b27cf144afe68`.
 
 Pinned primary revisions:
 

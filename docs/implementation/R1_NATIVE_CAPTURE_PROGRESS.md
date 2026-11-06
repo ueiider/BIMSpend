@@ -1,9 +1,9 @@
 # R1 Native Capture — Implementation Checkpoint
 
-- Branch: `build/bimspend-r1-05-timesheet-suggestions` (created from `build/bimspend-r1-04-revit-correlation` at `842ae0cbaa667a2f1aece0bfd60c24b4c013418a`)
+- Branch: `build/bimspend-r1-06-review-approval-ui` (created from `build/bimspend-r1-05-timesheet-suggestions` at `556b7b8291896175ec92602b52e6b0ce8901ab76`)
 - Base main: `65e344b340967108e35e54721d76ec223f8769e0`
-- Status: R1-01/R1-02/R1-03 complete, R1-04 complete, R1-05 complete. All 139 domain tests + 58 GUI+capture tests pass.
-- Schema version: v8 (time_entry_suggestions table).
+- Status: R1-01/R1-02/R1-03 complete, R1-04 complete, R1-05 complete, R1-06 complete. All 146 domain tests pass.
+- Schema version: v9 (suggestion_decisions audit table).
 
 ## R1-01 — ActivityWatch Source Provenance
 
@@ -50,45 +50,38 @@
   - Company-scoped tenancy isolation
 - Database v7 migration: 4 new tables + 9 indexes
 
-## R1-05 — Automatic Time Entry Suggestions & Designer Review
+## R1-06 — Designer Review and Manager Approval UI
 
-- `src/bimspend/capture/suggestion_engine.py` — Session-based suggestion engine
-  - Groups consecutive same-project observations into suggestions
-  - Excludes AFK and locked-session intervals
-  - Company-scoped, idempotent generation
-  - Deterministic ID generation from input data
-  - Confidence levels: CONFIRMED, HIGH, MEDIUM, LOW, UNASSIGNED
-- `src/bimspend/models.py` — TimeEntrySuggestion dataclass, SuggestionState enum
-- `src/bimspend/db.py` — v8 migration: time_entry_suggestions table + indexes
-- Database methods: upsert_suggestion, get_suggestion, list_suggestions
-- Domain actions: submit_suggestion, reject_suggestion
-- Tests: `tests/capture/test_suggestion_engine.py` — 13 tests
-
-## SQLite Integration
-
-- v8 migration: time_entry_suggestions table + 4 indexes
-- WAL mode, busy timeout, transaction safety preserved
-- Idempotent ingestion via UNIQUE(source, external_id)
-
-## Tests
-
-- `tests/capture/test_capture_module.py` — 29 tests (capture module)
-- `tests/capture/test_correlation.py` — 9 tests (correlation engine)
-- `tests/capture/test_suggestion_engine.py` — 13 tests (suggestion engine)
-- 139 domain tests pass
-- 58 GUI+capture tests pass
+- `src/bimspend/capture/suggestion_domain.py` — SuggestionService domain service
+  - submit_suggestion: pending_review → submitted (designer-owned, company-scoped)
+  - approve_suggestion: submitted → approved (manager-only, no billing)
+  - reject_suggestion: pending_review → rejected (designer), submitted → rejected (manager)
+  - return_for_correction: submitted → rejected (manager)
+  - split_suggestion: split pending suggestion into two
+  - merge_suggestions: combine multiple pending suggestions into one
+  - get_suggestion_audit_trail: audit history for a suggestion
+  - All actions require authenticated session-validated actor with company scope
+- `src/bimspend/app/screens/designer_review.py` — DesignerReviewScreen
+  - Table view: project, start, end, minutes, confidence, source, state
+  - Filters: project
+  - Actions: edit, submit, reject, split, merge
+  - Edit dialog: project ID, minutes, review notes
+- `src/bimspend/app/screens/manager_approval.py` — ManagerApprovalScreen
+  - Table view: entry ID, project, user, start, end, minutes, confidence, state
+  - Filters: project
+  - Actions: approve, reject, return for correction, bulk approve, bulk reject
+- `src/bimspend/app/shell.py` — Navigation entries for designer_review and manager_approval
+- `src/bimspend/db.py` — v9 migration: suggestion_decisions table + 3 indexes
+  - Fixed upsert_suggestion to use DO UPDATE instead of DO NOTHING
+- Tests: `tests/capture/test_suggestion_domain.py` — 7 tests (auth, RBAC, company scope, audit trail)
+- 146 domain tests pass
 
 ## CI
 
-- `.github/workflows/preview-tests.yml` — includes `build/bimspend-r1-05-timesheet-suggestions`
+- `.github/workflows/preview-tests.yml` — includes `build/bimspend-r1-06-review-approval-ui`
 
 ## Remaining Limitations
 
 - Real Windows capture validation pending (requires pywin32 + Windows desktop)
 - Real Revit integration validation pending (requires Revit installation)
-- IPC named pipe not tested on real Windows (pywin32 pipe functions unavailable locally)
-- No Windows autostart or background service (by design)
-
-## Next Implementation Action
-
-R1-05 is complete. Next milestone: R1-06 — Timesheet Review GUI & Manager Approval UI (designer review screens, manager approval dashboard, submission workflow UI).
+- GUI tests not run (no Tcl/Tk display available in this environment)
