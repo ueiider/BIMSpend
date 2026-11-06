@@ -7,6 +7,7 @@ on:
       - build/bimspend-p0-foundation
       - build/bimspend-p0-auth-session
       - build/bimspend-p0-security-hardening
+      - build/bimspend-r1-native-capture
   workflow_dispatch:
 
 jobs:

@@ -1,0 +1,41 @@
+MPL-2.0 License Text for ActivityWatch-derived code
+
+Source: https://github.com/ActivityWatch/activitywatch/blob/9fee4702fea08dbe0149cc6e28f4ef66b49f54ec/LICENSE.txt
+
+Mozilla Public License Version 2.0
+==================================
+
+1. Definitions
+--------------
+
+1.1. "Contributor"
+    means each individual or legal entity that creates, contributes to the
+    creation of, or owns Covered Software.
+
+1.2. "Contributor Version"
+    means the combination of the Contributions of others (if any) used by a
+    Contributor and that particular Contributor's Contribution.
+
+1.3. "Contribution"
+    means Covered Software of a particular Contributor.
+
+1.4. "Covered Software"
+    means Source Code Form to which the initial Contributor has attached the
+    notice in Exhibit A, the Executable Form of such Source Code Form, and
+    Modifications of such Source Code Form, if any.
+
+1.5. "Incompatible With Secondary Licenses"
+    means...
+
+[Full MPL-2.0 text continues... See upstream source for complete text.]
+
+This file is a placeholder. The complete MPL-2.0 text must be obtained from:
+https://github.com/ActivityWatch/activitywatch/blob/9fee4702fea08dbe0149cc6e28f4ef66b49f54ec/LICENSE.txt
+
+MPL-2.0 Key Obligations for BIMSpend:
+- Source files derived from ActivityWatch must retain MPL-2.0 headers
+- Original copyright notices must be preserved
+- Modifications must be documented (see ACTIVITYWATCH_SOURCE_MANIFEST.md)
+- When distributing covered source in executable form, corresponding source
+  must be made available (MPL-2.0 §3.2)
+- Legal review required before any production distribution

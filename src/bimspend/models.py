@@ -98,6 +98,7 @@ class ActivityEvent:
     started_at: str  # ISO-8601
     ended_at: str  # ISO-8601
     duration_minutes: float
+    company_id: Optional[str] = None  # company scope for tenant isolation
     is_afk: bool = False
     event_type: str = "active_window"
     raw_payload: Optional[dict[str, Any]] = None
@@ -109,6 +110,7 @@ class ActivityEvent:
             "source": self.source,
             "external_id": self.external_id,
             "user_id": self.user_id,
+            "company_id": self.company_id,
             "app_name": self.app_name,
             "window_title": self.window_title,
             "started_at": self.started_at,
@@ -132,6 +134,7 @@ class ActivityEvent:
             started_at=data["started_at"],
             ended_at=data["ended_at"],
             duration_minutes=float(data["duration_minutes"]),
+            company_id=data.get("company_id"),
             is_afk=bool(data.get("is_afk", False)),
             event_type=data.get("event_type", "active_window"),
             raw_payload=data.get("raw_payload"),

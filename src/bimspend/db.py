@@ -17,6 +17,8 @@ Schema versions:
   v5: Security hardening — added is_active to companies for company-level
       deactivation, and company_id to time_entries for cross-company
       access enforcement at the record level.
+  v6: Activity event company scoping — added company_id to activity_events
+      for tenant isolation of captured activity events.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ import time
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, timezone, timedelta
-from typing import Any
+from typing import Any, Optional
 
 from .models import (
     ActivityEvent,
@@ -79,9 +81,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 5:
+            if version is not None and version > 6:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 5")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 6")
         self._create_tables()
         self._migrate()
 
@@ -382,6 +384,22 @@ class Database:
                     )
                 self.conn.execute(
                     "INSERT INTO schema_version(version,applied_at) VALUES (5,?)", (_now_iso(),))
+        # v6 migration: company_id on activity_events for tenant isolation
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 6").fetchone():
+            with self.transaction():
+                cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(activity_events)")}
+                if "company_id" not in cols:
+                    self.conn.execute(
+                        "ALTER TABLE activity_events ADD COLUMN company_id TEXT REFERENCES companies(id)"
+                    )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_activity_events_company ON activity_events(company_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_activity_events_user_company ON activity_events(user_id, company_id)"
+                )
+                self.conn.execute(
+                    "INSERT INTO schema_version(version,applied_at) VALUES (6,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -492,25 +510,33 @@ class Database:
     # Activity events (idempotent ingestion via UNIQUE(source, external_id))
     # ------------------------------------------------------------------
     @atomic_write
-    def ingest_event(self, event: ActivityEvent) -> bool:
+    def ingest_event(
+        self, event: ActivityEvent, company_id: Optional[str] = None
+    ) -> bool:
         """Insert an activity event. Returns False if a duplicate
-        (source, external_id) already exists — idempotent ingestion."""
+        (source, external_id) already exists — idempotent ingestion.
+
+        company_id scopes the event to a company for tenant isolation.
+        If not provided, falls back to event.company_id.
+        """
+        company_id = company_id or event.company_id
         try:
             self.conn.execute(
                 """
                 INSERT INTO activity_events
-                    (id, source, external_id, user_id, app_name, window_title,
+                    (id, source, external_id, user_id, company_id, app_name, window_title,
                      started_at, ended_at, duration_minutes, is_afk,
                      event_type, raw_payload, title_redacted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.id,
                     event.source,
                     event.external_id,
                     event.user_id,
+                    company_id,
                     event.app_name,
-                    _hash_title(event.window_title) if not event.title_redacted else "[REDACTED]",
+                    event.window_title if event.title_redacted else _hash_title(event.window_title),
                     event.started_at,
                     event.ended_at,
                     event.duration_minutes,
@@ -545,6 +571,7 @@ class Database:
             source=row["source"],
             external_id=row["external_id"],
             user_id=row["user_id"],
+            company_id=row["company_id"],
             app_name=row["app_name"],
             window_title=row["window_title"],
             started_at=row["started_at"],

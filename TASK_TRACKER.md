@@ -17,7 +17,8 @@ Build status: **AUTHORIZED — owner approved 2026-11-05; B2-A audit deferred, n
 | P1-07 | Produce staged implementation proposal and explicit approval gate | DONE | PLAN_AUDIT_REPORT.md §§9–10 |
 | B2-01 | Run isolated reproducible baseline builds/tests | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; B2-A audit deferred; baseline validation documented in build branch |
 | P0-009/P0-010 | Authentication, session, and authorization foundation | DONE | Branch build/bimspend-p0-auth-session at 3e61aaf1f24fb692718e514010f0aee36a6ff69e; 62 tests passed |
-| SH-001/SH-002/SH-003 | Security hardening: session validation, company-scoped authorization, password storage | DONE | Branch build/bimspend-p0-security-hardening at 7fdfe0f4d783b7aba40fc1c373acf6ffe8797326; 88 domain tests + 7 GUI tests passed; schema v5; pbkdf2 210k iterations; CI test_report_date_filter_grouping_csv_and_privacy fixed to use authenticated sessions |
+| SH-001/SH-002/SH-003 | Security hardening: session validation, company-scoped authorization, password storage | DONE | Branch build/bimspend-p0-security-hardening at 70d4074fc82853a0a80b9d375c691cbc70f0f303; 88 domain tests + 7 GUI tests passed; schema v5; pbkdf2 210k iterations; CI test_report_date_filter_grouping_csv_and_privacy fixed to use authenticated sessions |
+| R1-01/R1-02/R1-03 | ActivityWatch source reuse, native Windows capture, AFK/session-lock/heartbeat | DONE | Branch build/bimspend-r1-native-capture; 113 domain tests + 7 GUI tests passed; schema v6; ActivityWatch-derived code in src/bimspend/capture/activitywatch_derived/ (MPL-2.0); source manifest at docs/open-source/ACTIVITYWATCH_SOURCE_MANIFEST.md |
 | B3-01 | Prototype end-to-end event -> project -> manager report | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; vertical slice implemented in build branch |
 
 ## Audit conclusion

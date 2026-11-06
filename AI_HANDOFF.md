@@ -18,7 +18,9 @@ P1-01 through P1-07 were completed as a static/research audit. The full evidence
 
 P0-001 through P0-010 were completed on branch `build/bimspend-p0-auth-session` at commit `3e61aaf1f24fb692718e514010f0aee36a6ff69e`. All 62 domain tests pass.
 
-SH-001/SH-002/SH-003 security hardening was completed on branch `build/bimspend-p0-security-hardening`. All 88 domain tests and 7 GUI tests pass. CI fix applied to `test_report_date_filter_grouping_csv_and_privacy` (now uses authenticated company-scoped sessions). Schema migrated to v5 (companies.is_active, time_entries.company_id). PBKDF2 iterations raised to 210,000 with rehash-on-login. Final commit `7fdfe0f4d783b7aba40fc1c373acf6ffe8797326`.
+SH-001/SH-002/SH-003 security hardening was completed on branch `build/bimspend-p0-security-hardening`. All 88 domain tests and 7 GUI tests pass. CI fix applied to `test_report_date_filter_grouping_csv_and_privacy` (now uses authenticated company-scoped sessions). Schema migrated to v5 (companies.is_active, time_entries.company_id). PBKDF2 iterations raised to 210,000 with rehash-on-login. Final commit `70d4074fc82853a0a80b9d375c691cbc70f0f303`.
+
+R1-01/R1-02/R1-03 native Windows capture was completed on branch `build/bimspend-r1-native-capture`. All 113 domain tests and 7 GUI tests pass. Schema migrated to v6 (activity_events.company_id). ActivityWatch-derived source (MPL-2.0) adapted for windows.py, privacy_filter.py, watcher_main.py. Capture controller, AFK detector, session lock detector, and heartbeat manager implemented. Source manifest at docs/open-source/ACTIVITYWATCH_SOURCE_MANIFEST.md.
 
 Pinned primary revisions:
 

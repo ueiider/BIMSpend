@@ -440,7 +440,7 @@ def test_identity_map_repeatable_on_reopen(tmp_path):
     assert len(maps) == 1
     assert maps[0].historical_user_id == "designer_01"
     assert maps[0].mapping_status == "unresolved"
-    assert db2.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 5
+    assert db2.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 6
     db2.close()
 
 
@@ -504,7 +504,7 @@ def test_migration_v1_to_v4(tmp_path):
 
     db = Database(path)
     try:
-        assert db.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 5
+        assert db.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 6
         maps = db.get_user_identity_maps()
         assert len(maps) == 1
         assert maps[0].historical_user_id == "m1"
