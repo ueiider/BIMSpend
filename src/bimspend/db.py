@@ -10,6 +10,10 @@ Schema versions:
   v2: Build 01+ fixes — added submitted_by/submitted_at to time_entries,
       title_redacted to activity_events, made attributed_time.project_id
       nullable for unassigned/ambiguous events.
+  v3: User identity reconciliation — added user_identity_map table mapping
+      historical user_ids from time_entries to team_members.
+  v4: Authentication and authorization — added companies, company_members,
+      user_credentials, and sessions tables for session-based auth.
 """
 
 from __future__ import annotations
@@ -17,11 +21,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
 from functools import wraps
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, timedelta
 from typing import Any
 
 from .models import (
@@ -71,9 +76,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 3:
+            if version is not None and version > 4:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 3")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 4")
         self._create_tables()
         self._migrate()
 
@@ -303,6 +308,61 @@ class Database:
                             (f"map_{uid}", uid, None, "unresolved", None, None, None, _now_iso()),
                         )
                 self.conn.execute("INSERT INTO schema_version(version,applied_at) VALUES (3,?)", (_now_iso(),))
+        # v4 migration: authentication and authorization — companies,
+        # company_members, user_credentials, sessions tables
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 4").fetchone():
+            with self.transaction():
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS companies (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS company_members (
+                        company_id TEXT NOT NULL REFERENCES companies(id),
+                        member_id TEXT NOT NULL REFERENCES team_members(id),
+                        role TEXT NOT NULL CHECK(role IN ('designer', 'manager', 'administrator')),
+                        joined_at TEXT NOT NULL,
+                        PRIMARY KEY (company_id, member_id)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_credentials (
+                        id TEXT PRIMARY KEY,
+                        member_id TEXT NOT NULL UNIQUE REFERENCES team_members(id),
+                        username TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        is_active INTEGER NOT NULL DEFAULT 1
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        id TEXT PRIMARY KEY,
+                        member_id TEXT NOT NULL REFERENCES team_members(id),
+                        company_id TEXT NOT NULL REFERENCES companies(id),
+                        expires_at TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        revoked_at TEXT
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_sessions_member ON sessions(member_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_sessions_company ON sessions(company_id)"
+                )
+                self.conn.execute("INSERT INTO schema_version(version,applied_at) VALUES (4,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -626,7 +686,194 @@ class Database:
             self._commit()
 
     # ------------------------------------------------------------------
-    # User identity reconciliation
+    # Authentication and session management
+    # ------------------------------------------------------------------
+    def upsert_company(self, company_id: str, name: str) -> None:
+        """Create or update a company."""
+        self.conn.execute(
+            """
+            INSERT INTO companies (id, name, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name
+            """,
+            (company_id, name, _now_iso()),
+        )
+        self._commit()
+
+    def get_company(self, company_id: str) -> dict[str, Any] | None:
+        """Get a company by id."""
+        row = self.conn.execute(
+            "SELECT * FROM companies WHERE id = ?", (company_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_companies(self) -> list[dict[str, Any]]:
+        """List all companies."""
+        rows = self.conn.execute("SELECT * FROM companies ORDER BY name").fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_company_member(
+        self, company_id: str, member_id: str, role: str
+    ) -> None:
+        """Assign a team member to a company with a role."""
+        member = self.conn.execute(
+            "SELECT 1 FROM team_members WHERE id = ?", (member_id,)
+        ).fetchone()
+        if member is None:
+            raise ValueError(f"Unknown team member id: {member_id}")
+        if role not in ("designer", "manager", "administrator"):
+            raise ValueError(f"Invalid role: {role}")
+        self.conn.execute(
+            """
+            INSERT INTO company_members (company_id, member_id, role, joined_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(company_id, member_id) DO UPDATE SET role=excluded.role
+            """,
+            (company_id, member_id, role, _now_iso()),
+        )
+        self._commit()
+
+    def list_company_members(self, company_id: str) -> list[dict[str, Any]]:
+        """List all members of a company with their roles."""
+        rows = self.conn.execute(
+            """
+            SELECT cm.member_id, cm.role, cm.joined_at, tm.name, tm.loaded_cost_rate, tm.is_active
+            FROM company_members cm
+            JOIN team_members tm ON tm.id = cm.member_id
+            WHERE cm.company_id = ?
+            ORDER BY tm.name
+            """,
+            (company_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_member_companies(self, member_id: str) -> list[dict[str, Any]]:
+        """List all companies a member belongs to."""
+        rows = self.conn.execute(
+            """
+            SELECT cm.company_id, c.name, cm.role, cm.joined_at
+            FROM company_members cm
+            JOIN companies c ON c.id = cm.company_id
+            WHERE cm.member_id = ?
+            ORDER BY c.name
+            """,
+            (member_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_user_credential(
+        self, member_id: str, username: str, password_hash: str
+    ) -> None:
+        """Create or update user credentials for a team member."""
+        member = self.conn.execute(
+            "SELECT 1 FROM team_members WHERE id = ?", (member_id,)
+        ).fetchone()
+        if member is None:
+            raise ValueError(f"Unknown team member id: {member_id}")
+        self.conn.execute(
+            """
+            INSERT INTO user_credentials (member_id, username, password_hash, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(member_id) DO UPDATE SET
+                username=excluded.username,
+                password_hash=excluded.password_hash
+            """,
+            (member_id, username, password_hash, _now_iso()),
+        )
+        self._commit()
+
+    def get_credential_by_username(self, username: str) -> dict[str, Any] | None:
+        """Get user credential by username."""
+        row = self.conn.execute(
+            """
+            SELECT uc.id, uc.member_id, uc.username, uc.password_hash,
+                   uc.created_at, uc.is_active, tm.name, tm.role, tm.is_active as member_active
+            FROM user_credentials uc
+            JOIN team_members tm ON tm.id = uc.member_id
+            WHERE uc.username = ?
+            """,
+            (username,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def create_session(
+        self, member_id: str, company_id: str, ttl_minutes: int = 480
+    ) -> str:
+        """Create a session for a member in a company. Returns session id."""
+        member = self.conn.execute(
+            "SELECT 1 FROM team_members WHERE id = ? AND is_active = 1", (member_id,)
+        ).fetchone()
+        if member is None:
+            raise ValueError(f"Unknown or inactive team member: {member_id}")
+        company = self.conn.execute(
+            "SELECT 1 FROM companies WHERE id = ?", (company_id,)
+        ).fetchone()
+        if company is None:
+            raise ValueError(f"Unknown company: {company_id}")
+        member_company = self.conn.execute(
+            "SELECT 1 FROM company_members WHERE company_id = ? AND member_id = ?",
+            (company_id, member_id),
+        ).fetchone()
+        if member_company is None:
+            raise ValueError(f"Member {member_id} is not in company {company_id}")
+        session_id = secrets.token_urlsafe(32)
+        now = _now_iso()
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
+        ).isoformat()
+        self.conn.execute(
+            """
+            INSERT INTO sessions (id, member_id, company_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, member_id, company_id, expires_at, now),
+        )
+        self._commit()
+        return session_id
+
+    def validate_session(self, session_id: str) -> dict[str, Any] | None:
+        """Validate a session and return member/company info if valid."""
+        row = self.conn.execute(
+            """
+            SELECT s.id, s.member_id, s.company_id, s.expires_at, s.created_at,
+                   s.revoked_at, tm.name, tm.role, tm.is_active as member_active,
+                   c.name as company_name
+            FROM sessions s
+            JOIN team_members tm ON tm.id = s.member_id
+            JOIN companies c ON c.id = s.company_id
+            WHERE s.id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        if row["revoked_at"] is not None:
+            return None
+        if row["member_active"] == 0:
+            return None
+        expires_at = datetime.fromisoformat(row["expires_at"])
+        if expires_at < datetime.now(timezone.utc):
+            return None
+        return dict(row)
+
+    def revoke_session(self, session_id: str) -> None:
+        """Revoke a session."""
+        self.conn.execute(
+            "UPDATE sessions SET revoked_at = ? WHERE id = ?",
+            (_now_iso(), session_id),
+        )
+        self._commit()
+
+    def revoke_all_sessions_for_member(self, member_id: str) -> None:
+        """Revoke all sessions for a member."""
+        self.conn.execute(
+            "UPDATE sessions SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL",
+            (_now_iso(), member_id),
+        )
+        self._commit()
+
+    # ------------------------------------------------------------------
+    # User identity reconciliation (existing methods)
     # ------------------------------------------------------------------
     def resolve_user_id(self, user_id: str) -> str | None:
         """Resolve a historical user_id to a team_member id, or None if unresolved."""

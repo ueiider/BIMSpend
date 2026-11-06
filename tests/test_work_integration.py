@@ -8,11 +8,16 @@ import pytest
 
 from bimspend.correlation import correlate_events
 from bimspend.db import Database
+from bimspend.identity import Actor, Role, current_auth
 from bimspend.models import ActivityEvent, Project, TimeEntryState
 from bimspend.review import approve_entry, bill_entry, reject_entry, submit_entry
 from bimspend.app.shell import BIMSpendApp
 
 FIXTURES = Path(__file__).resolve().parents[1] / "data" / "synthetic"
+
+
+def _set_actor(user_id: str, role: Role, company_id: str | None = None):
+    current_auth.set_actor(Actor(id=user_id, role=role, company_id=company_id))
 
 
 def test_archive_persists_without_changing_billability_or_name(tmp_path):
@@ -66,14 +71,19 @@ def test_designer_submit_manager_approval_and_explicit_billing(tmp_path):
     source = next(e for e in events if e.id == matched.activity_event_id)
     entry = suggest_entry(matched, db.get_project(matched.project_id), source.user_id)
     db.upsert_time_entry(entry)
-    submit_entry(entry, source.user_id)
+    # Designer submits own entry
+    _set_actor(source.user_id, Role.DESIGNER)
+    submit_entry(entry)
     assert entry.state == TimeEntryState.SUBMITTED and entry.billed_minutes == 0
+    # Manager approves
+    _set_actor("manager_demo", Role.MANAGER)
     with pytest.raises(ValueError):
-        bill_entry(entry, 30, "manager_demo")
-    approve_entry(entry, "manager_demo")
+        bill_entry(entry, 30)
+    approve_entry(entry)
     assert entry.state == TimeEntryState.APPROVED and entry.billed_minutes == 0
     db.upsert_time_entry(entry)
-    bill_entry(entry, min(30, entry.minutes), "billing_demo")
+    # Manager bills
+    bill_entry(entry, min(30, entry.minutes))
     db.upsert_time_entry(entry)
     db.close()
     db = Database(str(tmp_path / "flow.db"))
@@ -170,6 +180,7 @@ def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
         pending_item = next(i for i in timesheet.pending_tree.get_children() if timesheet.pending_tree.item(i, "text") == entry_id)
         timesheet.pending_tree.selection_set(pending_item)
         monkeypatch.setattr(simpledialog, "askfloat", lambda *args, **kwargs: 42)
+        _set_actor("designer_01", Role.DESIGNER)
         timesheet._edit_selected()
         assert app.db.get_time_entry(entry_id).minutes == 42
         pending_item = next(i for i in timesheet.pending_tree.get_children()
@@ -179,6 +190,7 @@ def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
         assert app.db.get_time_entry(entry_id).state == TimeEntryState.SUBMITTED
         submitted_item = next(i for i in timesheet.submitted_tree.get_children() if timesheet.submitted_tree.item(i, "text") == entry_id)
         timesheet.submitted_tree.selection_set(submitted_item)
+        _set_actor("manager_demo", Role.MANAGER)
         timesheet._approve_selected()
         approved = app.db.get_time_entry(entry_id)
         assert approved.state == TimeEntryState.APPROVED
@@ -202,6 +214,7 @@ def test_desktop_actions_project_attribution_and_review(tmp_path, monkeypatch):
 
 def test_runner_can_repeat_without_resetting_states_or_project_edits(tmp_path, monkeypatch, capsys):
     from bimspend.runner import run
+    current_auth.clear()
     monkeypatch.chdir(tmp_path)
     run()
     db = Database("bimspend_demo.db")
@@ -218,7 +231,6 @@ def test_runner_can_repeat_without_resetting_states_or_project_edits(tmp_path, m
     assert [(e.id, e.state, e.billed_minutes) for e in db.list_time_entries()] == before_entries
     assert db.get_project(project.id).name == "Locally edited synthetic project"
     db.close()
-
 
 
 def test_billed_time_retains_approved_cost_and_hours():
@@ -239,6 +251,8 @@ def test_billed_time_retains_approved_cost_and_hours():
 def test_domain_edit_ownership_and_audit_survives_restart(tmp_path):
     from bimspend.review import edit_entry
     from bimspend.models import TimeEntry
+    from bimspend.identity import current_auth
+    current_auth.clear()
     path = str(tmp_path / "audit.db")
     db = Database(path)
     project = Project("p", "Synthetic project", "Client", 150, 80)
@@ -251,16 +265,23 @@ def test_domain_edit_ownership_and_audit_survives_restart(tmp_path):
     db.upsert_attributed_time(AttributedTime("a", "e", "p", 60, 1.0, "manual"))
     entry = TimeEntry("t", "a", "p", "designer_01", 60)
     db.upsert_time_entry(entry)
+    # Non-owner designer cannot edit (authenticated mode)
+    _set_actor("designer_02", Role.DESIGNER)
     with pytest.raises(PermissionError):
-        edit_entry(entry, 30, "designer_02")
+        edit_entry(entry, 30)
+    # Invalid minutes raises ValueError regardless of auth
+    current_auth.clear()
     with pytest.raises(ValueError):
         edit_entry(entry, 0, "designer_01")
-    edit_entry(entry, 30, "designer_01")
+    # Owner designer can edit
+    _set_actor("designer_01", Role.DESIGNER)
+    edit_entry(entry, 30)
     db.upsert_time_entry(entry, actor_id="designer_01")
-    submit_entry(entry, "designer_01")
+    submit_entry(entry)
     db.upsert_time_entry(entry, actor_id="designer_01")
+    # Cannot edit after submission (not pending)
     with pytest.raises(ValueError):
-        edit_entry(entry, 20, "designer_01")
+        edit_entry(entry, 20)
     db.close()
     db = Database(path)
     assert db.get_time_entry("t").minutes == 30

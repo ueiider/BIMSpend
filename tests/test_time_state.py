@@ -14,6 +14,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from bimspend.db import Database  # noqa: E402
+from bimspend.identity import Actor, Role, current_auth
 from bimspend.models import (  # noqa: E402
     ActivityEvent,
     AttributedTime,
@@ -28,6 +29,10 @@ from bimspend.review import (  # noqa: E402
     submit_entry,
     suggest_entry,
 )
+
+
+def _set_actor(user_id: str, role: Role, company_id: str | None = None):
+    current_auth.set_actor(Actor(id=user_id, role=role, company_id=company_id))
 
 
 _SCRATCH_DB = "test_bimspend_scratch.db"
@@ -87,12 +92,14 @@ def test_observed_vs_attributed_vs_approved_are_separate():
         db.upsert_attributed_time(attributed)  # persist before FK reference
         entry = suggest_entry(attributed, project, "designer_01")
         entry.minutes = 100.0  # designer modifies suggested hours
-        submit_entry(entry, submitted_by="designer_01")
+        _set_actor("designer_01", Role.DESIGNER)
+        submit_entry(entry)
         db.upsert_time_entry(entry)
-        entry = approve_entry(entry, reviewed_by="manager_01")
+        _set_actor("manager_01", Role.MANAGER)
+        approve_entry(entry)
         db.upsert_time_entry(entry)
         # Billing is a SEPARATE explicit action — NOT automatic
-        entry = bill_entry(entry, billed_minutes=80.0, reviewed_by="manager_01")
+        bill_entry(entry, billed_minutes=80.0)
         db.upsert_time_entry(entry)
         stored_entry = db.get_time_entry(entry.id)
         assert stored_entry.state == TimeEntryState.BILLED
@@ -107,7 +114,8 @@ def test_observed_vs_attributed_vs_approved_are_separate():
 
         # Rejected entries don't contribute to approved/billed.
         entry2 = suggest_entry(attributed, project, "designer_01")
-        entry2 = reject_entry(entry2, reviewed_by="designer_01")
+        _set_actor("designer_01", Role.DESIGNER)
+        reject_entry(entry2)
         db.upsert_time_entry(entry2)
         assert db.get_time_entry(entry2.id).state == TimeEntryState.REJECTED
         assert db.get_time_entry(entry2.id).billed_minutes == 0.0
@@ -202,9 +210,11 @@ def test_labor_cost_and_standard_value_are_separate():
         )
         db.upsert_attributed_time(attributed)  # persist before FK reference
         entry = suggest_entry(attributed, project, "designer_01")
-        submit_entry(entry, submitted_by="designer_01")
+        _set_actor("designer_01", Role.DESIGNER)
+        submit_entry(entry)
         db.upsert_time_entry(entry)
-        entry = approve_entry(entry, reviewed_by="manager_01")
+        _set_actor("manager_01", Role.MANAGER)
+        approve_entry(entry)
         db.upsert_time_entry(entry)
 
         stored = db.get_time_entry(entry.id)

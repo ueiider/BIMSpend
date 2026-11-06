@@ -19,6 +19,7 @@ from typing import Any
 from bimspend.db import Database
 from bimspend.models import Project, ActivityEvent, TimeEntryState
 from bimspend.dashboard import all_projects_summary
+from bimspend.auth import SessionManager
 
 
 def _fixture(name: str) -> str:
@@ -46,7 +47,7 @@ class BIMSpendApp:
 
         # Domain layer
         self.db = Database(db_path)
-        self.current_user = "designer_01"  # provisional; real auth later
+        self.current_user: str | None = None  # Set via login(); no hardcoded identity
         self.current_project: Project | None = None
 
         # Style
@@ -328,6 +329,21 @@ class BIMSpendApp:
             "Settings",
             "Settings panel\n\nLocal synthetic data mode.\nNo employee monitoring active.\nNo remote synchronization.",
         )
+
+    def login(self, username: str, password: str) -> None:
+        """Authenticate the user and set the current session.
+
+        Raises ValueError if credentials are invalid.
+        """
+        sm = SessionManager(self.db)
+        actor = sm.login(username, password)
+        self.current_user = actor.id
+
+    def logout(self) -> None:
+        """Clear the current session."""
+        sm = SessionManager(self.db)
+        sm.logout()
+        self.current_user = None
 
     def destroy(self) -> None:
         self.db.close()

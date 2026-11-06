@@ -1,8 +1,11 @@
-"""Synthetic preview identities and domain authorization.
+"""Authentication and domain authorization for BIMSpend.
 
-Actor IDs are demonstration inputs, not authenticated sessions. Never use
-this registry with real employees or exposed network endpoints.
+Actor IDs are authenticated session identifiers, not raw employee
+handles. Never use this registry with real employees or exposed network
+endpoints.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 
@@ -10,27 +13,73 @@ from enum import Enum
 class Role(str, Enum):
     DESIGNER = "designer"
     MANAGER = "manager"
+    ADMINISTRATOR = "administrator"
 
 
 @dataclass(frozen=True)
 class Actor:
     id: str
     role: Role
+    company_id: str | None = None
 
 
-PREVIEW_ACTORS = {
-    "designer_01": Actor("designer_01", Role.DESIGNER),
-    "designer_02": Actor("designer_02", Role.DESIGNER),
-    "manager_01": Actor("manager_01", Role.MANAGER),
-    "manager_demo": Actor("manager_demo", Role.MANAGER),
-    "billing_demo": Actor("billing_demo", Role.MANAGER),
-}
+class AuthContext:
+    """Holds the authenticated actor and their company context."""
+
+    def __init__(self, actor: Actor | None = None):
+        self._actor = actor
+
+    @property
+    def actor(self) -> Actor | None:
+        return self._actor
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._actor is not None
+
+    @property
+    def role(self) -> Role | None:
+        return self._actor.role if self._actor else None
+
+    def set_actor(self, actor: Actor) -> None:
+        self._actor = actor
+
+    def clear(self) -> None:
+        self._actor = None
 
 
-def require_actor(actor_id: str, role: Role, owner_id: str | None = None) -> Actor:
-    actor = PREVIEW_ACTORS.get(actor_id)
-    if actor is None or actor.role != role:
-        raise PermissionError(f"Preview actor cannot perform {role.value} action.")
+# Module-level auth context for the vertical slice. In a multi-threaded
+# GUI application this would be replaced by a per-thread or per-request
+# context, but for the single-user desktop app a module-level context
+# is sufficient and keeps the code simple.
+current_auth: AuthContext = AuthContext()
+
+
+def require_actor(
+    role: Role | None = None,
+    owner_id: str | None = None,
+    company_id: str | None = None,
+) -> Actor:
+    """Require an authenticated actor with the given role and optional
+    ownership/company constraints.
+
+    Raises PermissionError if:
+      - No actor is authenticated
+      - The actor's role does not match the required role
+      - owner_id is given and the actor is not that owner
+      - company_id is given and the actor is not in that company
+    """
+    actor = current_auth.actor
+    if actor is None:
+        raise PermissionError("No authenticated actor.")
+    if role is not None and actor.role != role:
+        raise PermissionError(
+            f"Actor {actor.id} cannot perform {role.value} action."
+        )
     if owner_id is not None and actor.id != owner_id:
-        raise PermissionError("Designer can change only their own time.")
+        raise PermissionError("Actor can change only their own records.")
+    if company_id is not None and actor.company_id != company_id:
+        raise PermissionError(
+            f"Actor {actor.id} is not in company {company_id}."
+        )
     return actor
