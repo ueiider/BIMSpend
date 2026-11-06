@@ -24,7 +24,23 @@ All notable structural and documentation changes are recorded here. This changel
 - Updated `CONTEXT_FOR_AI.md` so future agents can resume with the latest findings and mobile dashboard hypothesis.
 - No software installed, code copied, production deployment performed, or MVP approved.
 
-## 2026-11-06 — R1-06 Designer Review and Manager Approval UI
+## 2026-11-06 — R1-07 Project Costing, Budget Control & Financial Reporting
+
+- Branch `build/bimspend-r1-07-financial-integration` created from R1-06 commit `eada297f197fc9e46f5e89462d4123929eddc813`
+- Schema migrated to v10: added `employee_cost_rates`, `employee_billing_rates`, `project_budgets`, `budget_revisions`, `financial_adjustments`, `financial_audit_events` tables with company-scoped indexes
+- Added `src/bimspend/financial.py`: FinancialService, BudgetService, CostRateService domain services
+  - CostRateService: employee cost/billing rates with effective date ranges, historical rate preservation, manager/admin only
+  - BudgetService: project budget creation, auditable revisions, current budget tracking
+  - FinancialService: approved-time labour cost calculation (Decimal-based), budget consumption, remaining budget, utilization, variance, forecasting (linear burn rate), profitability (gross margin), financial adjustments, company-scoped queries
+- Added `src/bimspend/app/screens/financial_dashboard.py`: FinancialDashboardScreen with metric cards (total budget, actual cost, remaining, over-budget count) and project financial summary table
+- Added `src/bimspend/app/screens/project_financial_detail.py`: ProjectFinancialDetailScreen with project info, budget consumption, labour cost by employee, deterministic forecast
+- Added `src/bimspend/app/screens/financial_reports.py`: FinancialReportsScreen with 6 report types (project cost summary, budget vs actual, employee labour cost, approved hours by project, financial variance) and CSV export
+- Updated `src/bimspend/app/shell.py`: Added navigation entries for financial_dashboard, project_financial_detail, financial_reports
+- Added `tests/capture/test_financial_module.py`: 22 tests covering approved-time eligibility, rejected/pending exclusion, cost rates, historical preservation, Decimal arithmetic, budget creation/revisions, utilization, over-budget, zero budget, forecasting, profitability, company scoping, unauthorized access prevention, no automatic billing, migration compatibility
+- All 168 domain tests + 7 GUI tests pass
+- Committed and pushed as `93b0a9f12d2974d079c9174ae5a483c811f5ce17`
+- Updated AI_HANDOFF.md, TASK_TRACKER.md
+
 
 - Branch `build/bimspend-r1-06-review-approval-ui` created from R1-05 commit `556b7b8291896175ec92602b52e6b0ce8901ab76`
 - Schema migrated to v9: added `suggestion_decisions` table for audit trail of submit/approve/reject/return_for_correction/split/merge

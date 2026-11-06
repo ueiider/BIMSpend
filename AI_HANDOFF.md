@@ -27,7 +27,7 @@ R1-05 automatic time entry suggestion engine was completed on branch `build/bims
 
 R1-06 designer review and manager approval UI was completed on branch `build/bimspend-r1-06-review-approval-ui`. All 146 domain tests pass. Schema migrated to v9 (suggestion_decisions audit table). SuggestionService domain service with submit/approve/reject/return_for_correction/split/merge operations. DesignerReviewScreen and ManagerApprovalScreen added to the application shell navigation. Final commit `eada297f197fc9e46f5e89462d4123929eddc813` (CI syntax fix).
 
-R1-07 project costing, budget control and financial reporting is in progress on branch `build/bimspend-r1-07-financial-integration`.
+R1-07 project costing, budget control and financial reporting is in progress on branch `build/bimspend-r1-07-financial-integration`. Schema migrated to v10 (employee_cost_rates, employee_billing_rates, project_budgets, budget_revisions, financial_adjustments, financial_audit_events). FinancialService, BudgetService, CostRateService implemented with Decimal-based monetary arithmetic. FinancialDashboardScreen, ProjectFinancialDetailScreen, FinancialReportsScreen added. 22 domain tests added. All 168 domain tests + 7 GUI tests pass. Final commit `93b0a9f12d2974d079c9174ae5a483c811f5ce17`.
 
 Pinned primary revisions:
 
