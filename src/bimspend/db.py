@@ -915,53 +915,66 @@ class Database:
     # Time entry suggestions
     # ------------------------------------------------------------------
     @atomic_write
-    def upsert_suggestion(self, suggestion: TimeEntrySuggestion) -> bool:
+    def upsert_suggestion(self, suggestion: TimeEntrySuggestion) -> None:
         """Upsert a time entry suggestion.
 
-        Returns True if inserted, False if duplicate (same id already exists).
-        Idempotent — saving the same suggestion twice is a no-op.
+        Inserts or updates a suggestion. Idempotent — saving the same
+        suggestion twice updates the existing record.
         """
         import json
 
-        try:
-            self.conn.execute(
-                """
-                INSERT INTO time_entry_suggestions
-                    (id, user_id, company_id, project_id, start_time, end_time,
-                     suggested_minutes, confidence, evidence_ids, state,
-                     edited_minutes, edited_project_id, review_notes,
-                     submitted_by, submitted_at, reviewed_by, reviewed_at,
-                     time_entry_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO NOTHING
-                """,
-                (
-                    suggestion.id,
-                    suggestion.user_id,
-                    suggestion.company_id,
-                    suggestion.project_id,
-                    suggestion.start_time,
-                    suggestion.end_time,
-                    suggestion.suggested_minutes,
-                    suggestion.confidence,
-                    json.dumps(suggestion.evidence_ids),
-                    suggestion.state,
-                    suggestion.edited_minutes,
-                    suggestion.edited_project_id,
-                    suggestion.review_notes,
-                    suggestion.submitted_by,
-                    suggestion.submitted_at,
-                    suggestion.reviewed_by,
-                    suggestion.reviewed_at,
-                    suggestion.time_entry_id,
-                    suggestion.created_at,
-                ),
-            )
-            self._commit()
-            return True
-        except sqlite3.IntegrityError:
-            # Duplicate id — already exists
-            return False
+        self.conn.execute(
+            """
+            INSERT INTO time_entry_suggestions
+                (id, user_id, company_id, project_id, start_time, end_time,
+                 suggested_minutes, confidence, evidence_ids, state,
+                 edited_minutes, edited_project_id, review_notes,
+                 submitted_by, submitted_at, reviewed_by, reviewed_at,
+                 time_entry_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                user_id=excluded.user_id,
+                company_id=excluded.company_id,
+                project_id=excluded.project_id,
+                start_time=excluded.start_time,
+                end_time=excluded.end_time,
+                suggested_minutes=excluded.suggested_minutes,
+                confidence=excluded.confidence,
+                evidence_ids=excluded.evidence_ids,
+                state=excluded.state,
+                edited_minutes=excluded.edited_minutes,
+                edited_project_id=excluded.edited_project_id,
+                review_notes=excluded.review_notes,
+                submitted_by=excluded.submitted_by,
+                submitted_at=excluded.submitted_at,
+                reviewed_by=excluded.reviewed_by,
+                reviewed_at=excluded.reviewed_at,
+                time_entry_id=excluded.time_entry_id,
+                created_at=excluded.created_at
+            """,
+            (
+                suggestion.id,
+                suggestion.user_id,
+                suggestion.company_id,
+                suggestion.project_id,
+                suggestion.start_time,
+                suggestion.end_time,
+                suggestion.suggested_minutes,
+                suggestion.confidence,
+                json.dumps(suggestion.evidence_ids),
+                suggestion.state,
+                suggestion.edited_minutes,
+                suggestion.edited_project_id,
+                suggestion.review_notes,
+                suggestion.submitted_by,
+                suggestion.submitted_at,
+                suggestion.reviewed_by,
+                suggestion.reviewed_at,
+                suggestion.time_entry_id,
+                suggestion.created_at,
+            ),
+        )
+        self._commit()
 
     def get_suggestion(self, suggestion_id: str) -> TimeEntrySuggestion | None:
         """Load a suggestion by id."""

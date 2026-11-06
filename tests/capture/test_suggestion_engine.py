@@ -441,6 +441,7 @@ def test_designer_reject_suggestion(tmp_path):
     db.upsert_company("c1", "Test Company", is_active=True)
     db.upsert_member(TeamMember("u1", "User One", "designer", 95, True))
     db.upsert_company_member("c1", "u1", "designer")
+    db.upsert_project(Project("proj-a", "Project A", "Client", 150.0, 80.0))
 
     suggestion = TimeEntrySuggestion(
         id="sugg-1",

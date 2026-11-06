@@ -8,6 +8,8 @@ on:
       - build/bimspend-p0-auth-session
       - build/bimspend-p0-security-hardening
       - build/bimspend-r1-native-capture
+      - build/bimspend-r1-05-timesheet-suggestions
+      - build/bimspend-r1-06-review-approval-ui
   workflow_dispatch:
 
 jobs:

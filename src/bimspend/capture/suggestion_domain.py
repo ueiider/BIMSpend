@@ -18,14 +18,20 @@ Suggestions are never auto-billed or auto-approved.
 
 from __future__ import annotations
 
-import datetime
-import hashlib
+from datetime import datetime, timezone, timedelta
 import secrets
 from typing import Any, Optional
 
 from bimspend.db import Database
 from bimspend.identity import Actor, Role, current_auth
-from bimspend.models import TimeEntry, TimeEntrySuggestion, TimeEntryState
+from bimspend.models import (
+    ActivityEvent,
+    AttributedTime,
+    Project,
+    TimeEntry,
+    TimeEntrySuggestion,
+    TimeEntryState,
+)
 
 
 class SuggestionDomainError(Exception):
@@ -54,56 +60,32 @@ class SuggestionService:
     ) -> TimeEntrySuggestion:
         """Submit a pending_review suggestion for manager approval.
 
-        Creates a linked TimeEntry in SUBMITTED state and marks the
-        suggestion as submitted. Idempotent — submitting an already
-        submitted suggestion is a no-op.
+        Marks the suggestion as submitted and records the audit decision.
+        Idempotent — submitting an already submitted suggestion is a no-op.
 
         Requires an authenticated designer actor who owns the suggestion.
         """
         actor = self._require_authenticated_actor(actor_id, Role.DESIGNER)
 
-        if suggestion.state != TimeEntrySuggestion.PENDING_REVIEW:
+        if suggestion.state != "pending_review":
             raise ValueError(
                 f"Cannot submit suggestion in state {suggestion.state}; "
                 "only pending_review suggestions can be submitted."
             )
-        if suggestion.user_id != actor.id:
-            raise PermissionError("Designers can submit only their own suggestions.")
         if suggestion.company_id != actor.company_id:
             raise PermissionError(
                 f"Suggestion company {suggestion.company_id} does not match "
                 f"actor company {actor.company_id}."
             )
+        if suggestion.user_id != actor.id:
+            raise PermissionError("Designers can submit only their own suggestions.")
 
         now = datetime.now(timezone.utc).isoformat()
 
-        # Create linked TimeEntry
-        entry = TimeEntry(
-            id=f"entry-{suggestion.id}",
-            attributed_time_id=suggestion.id,
-            project_id=suggestion.edited_project_id or suggestion.project_id or "",
-            user_id=suggestion.user_id,
-            minutes=suggestion.edited_minutes or suggestion.suggested_minutes,
-            state=TimeEntryState.SUBMITTED,
-            standard_rate=0.0,
-            loaded_cost_rate=0.0,
-            billed_minutes=0.0,
-            review_notes=suggestion.review_notes or notes,
-            reviewed_by=None,
-            reviewed_at=None,
-            submitted_by=actor.id,
-            submitted_at=now,
-            created_at=now,
-            company_id=suggestion.company_id,
-        )
-
-        self.db.upsert_time_entry(entry, actor_id=actor.id)
-
         # Update suggestion
-        suggestion.state = TimeEntrySuggestionState.SUBMITTED
+        suggestion.state = "submitted"
         suggestion.submitted_by = actor.id
         suggestion.submitted_at = now
-        suggestion.time_entry_id = entry.id
 
         self.db.upsert_suggestion(suggestion)
 
@@ -141,7 +123,7 @@ class SuggestionService:
         """
         actor = self._require_authenticated_actor(actor_id, Role.MANAGER)
 
-        if suggestion.state != TimeEntrySuggestionState.SUBMITTED:
+        if suggestion.state != "submitted":
             raise SuggestionDomainError(
                 f"Cannot approve suggestion in state {suggestion.state}; "
                 "only submitted suggestions can be approved."
@@ -154,7 +136,7 @@ class SuggestionService:
 
         now = datetime.now(timezone.utc).isoformat()
 
-        suggestion.state = TimeEntrySuggestionState.APPROVED
+        suggestion.state = "approved"
         suggestion.reviewed_by = actor.id
         suggestion.reviewed_at = now
 
@@ -194,10 +176,10 @@ class SuggestionService:
         """
         actor = self._require_authenticated_actor(actor_id)
 
-        if suggestion.state == TimeEntrySuggestionState.SUBMITTED:
+        if suggestion.state == "submitted":
             if actor.role != Role.MANAGER:
                 raise PermissionError("Only managers can reject submitted suggestions.")
-        elif suggestion.state == TimeEntrySuggestionState.PENDING_REVIEW:
+        elif suggestion.state == "pending_review":
             if actor.role != Role.DESIGNER:
                 raise PermissionError("Only designers can reject pending suggestions.")
             if suggestion.user_id != actor.id:
@@ -214,7 +196,7 @@ class SuggestionService:
                 f"actor company {actor.company_id}."
             )
 
-        suggestion.state = TimeEntrySuggestionState.REJECTED
+        suggestion.state = "rejected"
 
         self.db.upsert_suggestion(suggestion)
 
@@ -224,7 +206,7 @@ class SuggestionService:
             actor_company_id=actor.company_id,
             action="reject",
             previous_state=suggestion.state,
-            new_state=TimeEntrySuggestionState.REJECTED,
+            new_state="rejected",
             previous_minutes=None,
             new_minutes=suggestion.suggested_minutes,
             notes=notes,
@@ -248,7 +230,7 @@ class SuggestionService:
         """
         actor = self._require_authenticated_actor(actor_id, Role.MANAGER)
 
-        if suggestion.state != TimeEntrySuggestionState.SUBMITTED:
+        if suggestion.state != "submitted":
             raise SuggestionDomainError(
                 f"Cannot return suggestion in state {suggestion.state}; "
                 "only submitted entries can be returned for correction."
@@ -261,7 +243,7 @@ class SuggestionService:
 
         now = datetime.now(timezone.utc).isoformat()
 
-        suggestion.state = TimeEntrySuggestionState.REJECTED
+        suggestion.state = "rejected"
         suggestion.reviewed_by = actor.id
         suggestion.reviewed_at = now
         suggestion.review_notes = notes
@@ -299,7 +281,7 @@ class SuggestionService:
         """
         actor = self._require_authenticated_actor(actor_id, Role.DESIGNER)
 
-        if suggestion.state != TimeEntrySuggestionState.PENDING_REVIEW:
+        if suggestion.state != "pending_review":
             raise SuggestionDomainError(
                 f"Cannot split suggestion in state {suggestion.state}; "
                 "only pending_review suggestions can be split."
@@ -334,7 +316,7 @@ class SuggestionService:
             suggested_minutes=split_minutes,
             confidence=suggestion.confidence,
             evidence_ids=list(suggestion.evidence_ids),
-            state=TimeEntrySuggestionState.PENDING_REVIEW,
+            state="pending_review",
             created_at=now,
         )
 
@@ -349,12 +331,12 @@ class SuggestionService:
             suggested_minutes=round(suggestion.suggested_minutes - split_minutes, 2),
             confidence=suggestion.confidence,
             evidence_ids=list(suggestion.evidence_ids),
-            state=TimeEntrySuggestionState.PENDING_REVIEW,
+            state="pending_review",
             created_at=now,
         )
 
         # Mark original as merged
-        suggestion.state = TimeEntrySuggestionState.MERGED
+        suggestion.state = "merged"
 
         self.db.upsert_suggestion(first)
         self.db.upsert_suggestion(second)
@@ -366,8 +348,8 @@ class SuggestionService:
             actor_id=actor.id,
             actor_company_id=actor.company_id,
             action="split",
-            previous_state=TimeEntrySuggestionState.PENDING_REVIEW,
-            new_state=TimeEntrySuggestionState.MERGED,
+            previous_state="pending_review",
+            new_state="merged",
             previous_minutes=suggestion.suggested_minutes,
             new_minutes=suggestion.suggested_minutes,
             notes=f"Split into {split_minutes}min and "
@@ -405,7 +387,7 @@ class SuggestionService:
                 raise SuggestionDomainError(
                     f"Suggestion {sid} not found."
                 )
-            if s.state != TimeEntrySuggestionState.PENDING_REVIEW:
+            if s.state != "pending_review":
                 raise SuggestionDomainError(
                     f"Suggestion {sid} is in state {s.state}; "
                     "only pending_review suggestions can be merged."
@@ -440,13 +422,13 @@ class SuggestionService:
             suggested_minutes=round(total_minutes, 2),
             confidence=first.confidence,
             evidence_ids=evidence_ids,
-            state=TimeEntrySuggestionState.PENDING_REVIEW,
+            state="pending_review",
             created_at=now,
         )
 
         # Mark all originals as merged
         for s in suggestions:
-            s.state = TimeEntrySuggestionState.MERGED
+            s.state = "merged"
             self.db.upsert_suggestion(s)
 
         self.db.upsert_suggestion(merged)
@@ -458,7 +440,7 @@ class SuggestionService:
             actor_company_id=actor.company_id,
             action="merge",
             previous_state="multiple",
-            new_state=TimeEntrySuggestionState.PENDING_REVIEW,
+            new_state="pending_review",
             previous_minutes=None,
             new_minutes=total_minutes,
             notes=f"Merged {len(suggestions)} suggestions",
@@ -505,6 +487,14 @@ class SuggestionService:
                 f"Actor {actor.id} does not match requested actor_id {actor_id}."
             )
         if required_role is not None and actor.role != required_role:
+            if required_role == Role.DESIGNER:
+                raise PermissionError(
+                    "Only designers can perform this action."
+                )
+            if required_role == Role.MANAGER:
+                raise PermissionError(
+                    "Only managers can perform this action."
+                )
             raise PermissionError(
                 f"Actor {actor.id} cannot perform {required_role.value} action."
             )
@@ -554,5 +544,5 @@ class SuggestionService:
     def _add_minutes(iso_timestamp: str, minutes: float) -> str:
         """Add minutes to an ISO-8601 timestamp string."""
         dt = datetime.fromisoformat(iso_timestamp)
-        result = dt + datetime.timedelta(minutes=minutes)
+        result = dt + timedelta(minutes=minutes)
         return result.isoformat()
