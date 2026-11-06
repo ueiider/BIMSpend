@@ -1,3 +1,5 @@
+> **CURRENT OWNER DECISION — 2026-11-06 (supersedes conflicting historical statements below).** BIMSpend is a single independent commercial application. Miru and ActivityWatch are open-source code-reuse candidates, NOT mandatory external runtime services. Optional import/compatibility integrations may remain. Development has been authorized and implemented in dedicated branches; do not interpret historical "no product built", "await approval", "API/adapter first" or "do not implement" statements below as current instructions. Current source evidence and unresolved verification gates: [Architecture Alignment Audit](docs/architecture/ARCHITECTURE_ALIGNMENT_AUDIT_2026-11-06.md). Do not merge to main without review and tests.
+
 # BIMSpend — Continuation Context for Any AI Agent
 
 You are continuing an exploratory product brainstorm. Do not assume implementation is authorized.
