@@ -13,13 +13,27 @@ import json
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk, messagebox
-from typing import Any
+from tkinter import ttk, messagebox, simpledialog
+from typing import Any, Optional
 
+from bimspend.app.design import (
+    register_styles,
+    get_visible_nav_items,
+    NAV_CONFIG,
+    APP_BG,
+    SIDEBAR_BG,
+    CARD_BG,
+    HEADER_BG,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    ACCENT_BLUE,
+    ACCENT_TEAL,
+)
 from bimspend.db import Database
 from bimspend.models import Project, ActivityEvent, TimeEntryState
 from bimspend.dashboard import all_projects_summary
 from bimspend.auth import SessionManager
+from bimspend.identity import Actor, Role, current_auth
 
 
 def _fixture(name: str) -> str:
@@ -33,74 +47,176 @@ class BIMSpendApp:
     """Main BIMSpend application window.
 
     Provides:
-      - Left rail: workspace logo/name, role-aware navigation, Settings
-      - Top bar: workspace name, breadcrumbs, user menu
+      - Left rail: workspace logo/name, role-aware navigation, user profile
+      - Top bar: workspace name, breadcrumbs, search, user menu
       - Main content: screen canvas with page header and content
       - Status bar: capture state and sync state indicators
+
+    Authentication:
+      - Login required before any screen is shown
+      - Session validated via current_auth (fail-closed)
+      - Role-based navigation visibility
     """
 
     def __init__(self, root: tk.Tk | None = None, db_path: str = "bimspend.db"):
         self.root = root or tk.Tk()
         self.root.title("BIMSpend — Project Time & Cost Intelligence")
-        self.root.geometry("1200x800")
-        self.root.minsize(1000, 700)
+        self.root.geometry("1400x900")
+        self.root.minsize(1100, 750)
+
+        # High-DPI awareness for Windows
+        try:
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:  # noqa: BLE001
+            pass  # Non-Windows or older Windows
 
         # Domain layer
         self.db = Database(db_path)
-        self.current_user: str | None = None  # Set via login(); no hardcoded identity
+        self.current_user: str | None = None
+        self.current_actor: Optional[Actor] = None
         self.current_project: Project | None = None
+        self.authenticated = False
+
+        # Navigation breadcrumb stack
+        self._breadcrumb_stack: list[tuple[str, str]] = []  # (screen_id, label)
 
         # Style
-        self._setup_styles()
+        self.style = ttk.Style(self.root)
+        register_styles(self.style)
 
-        # Layout
-        self._build_shell()
+        # Layout (login first, then shell after auth)
+        self._build_login()
 
-        # Load data
+        # Load data (available regardless of auth state for testing)
         self._load_data()
 
-        # Show overview screen
-        self.show_screen("overview")
+        # Navigation state (populated by _build_shell after login)
+        self.nav_buttons: dict[str, ttk.Button] = {}
+
+        # Screens (lazy, created on first show)
+        self.screens: dict[str, Any] = {}
+        self.current_screen: str | None = None
 
     # ------------------------------------------------------------------
-    # Styling
+    # Login flow
     # ------------------------------------------------------------------
-    def _setup_styles(self) -> None:
-        self.style = ttk.Style()
-        self.style.theme_use("clam")
 
-        # Design tokens (from UI spec)
-        self.style.configure("App.TFrame", background="#F4F7F9")
-        self.style.configure("Sidebar.TFrame", background="#14324A")
-        self.style.configure("Header.TFrame", background="#FFFFFF")
-        self.style.configure("Card.TFrame", background="#FFFFFF", relief="solid", borderwidth=1)
+    def _build_login(self) -> None:
+        """Build the login screen."""
+        self.login_frame = ttk.Frame(self.root, style="App.TFrame")
+        self.login_frame.pack(fill="both", expand=True)
 
-        self.style.configure(
-            "Nav.TButton",
-            background="#14324A",
-            foreground="#FFFFFF",
-            borderwidth=0,
-            focuscolor="#1976A5",
-            anchor="w",
-            padding=(16, 10),
-            font=("Segoe UI", 11),
+        # Center container
+        center = ttk.Frame(self.login_frame, style="App.TFrame")
+        center.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Card
+        card = ttk.Frame(center, style="Card.TFrame")
+        card.pack(padx=40, pady=40)
+
+        ttk.Label(
+            card,
+            text="BIMSpend",
+            font=("Segoe UI", 28, "bold"),
+            foreground=ACCENT_BLUE,
+            background=CARD_BG,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            card,
+            text="Time & Cost Intelligence",
+            font=("Segoe UI", 12),
+            foreground=TEXT_SECONDARY,
+            background=CARD_BG,
+        ).pack(anchor="w", pady=(0, 24))
+
+        # Company
+        ttk.Label(card, text="Company", font=("Segoe UI", 10), background=CARD_BG).pack(anchor="w")
+        self.login_company_var = tk.StringVar()
+        company_combo = ttk.Combobox(
+            card,
+            textvariable=self.login_company_var,
+            state="readonly",
+            width=40,
         )
-        self.style.map(
-            "Nav.TButton",
-            background=[("active", "#1976A5"), ("pressed", "#0E2A3A")],
-            foreground=[("active", "#FFFFFF"), ("pressed", "#FFFFFF")],
-        )
+        company_combo.pack(fill="x", pady=(4, 16))
+        self._populate_companies(company_combo)
 
-        self.style.configure("Title.TLabel", background="#F4F7F9", foreground="#172B3A", font=("Segoe UI", 20, "bold"))
-        self.style.configure("Subtitle.TLabel", background="#F4F7F9", foreground="#4A6572", font=("Segoe UI", 12))
-        self.style.configure("MetricValue.TLabel", background="#FFFFFF", foreground="#14324A", font=("Segoe UI", 24, "bold"))
-        self.style.configure("MetricLabel.TLabel", background="#FFFFFF", foreground="#4A6572", font=("Segoe UI", 10))
-        self.style.configure("Status.TLabel", background="#FFFFFF", foreground="#287E72", font=("Segoe UI", 10, "bold"))
+        # Username
+        ttk.Label(card, text="Username", font=("Segoe UI", 10), background=CARD_BG).pack(anchor="w")
+        self.login_user_var = tk.StringVar()
+        ttk.Entry(card, textvariable=self.login_user_var, width=40).pack(fill="x", pady=(4, 16))
+
+        # Password
+        ttk.Label(card, text="Password", font=("Segoe UI", 10), background=CARD_BG).pack(anchor="w")
+        self.login_pass_var = tk.StringVar()
+        ttk.Entry(card, textvariable=self.login_pass_var, show="•", width=40).pack(fill="x", pady=(4, 24))
+
+        # Buttons
+        btn_frame = ttk.Frame(card, style="App.TFrame")
+        btn_frame.pack(fill="x")
+        ttk.Button(
+            btn_frame,
+            text="Cancel",
+            command=self.root.quit,
+        ).pack(side="right", padx=(8, 0))
+        ttk.Button(
+            btn_frame,
+            text="Sign In",
+            command=self._attempt_login,
+        ).pack(side="right")
+
+        # Bind Enter key
+        self.root.bind("<Return>", lambda _: self._attempt_login())
+
+    def _populate_companies(self, combo: ttk.Combobox) -> None:
+        """Populate company dropdown."""
+        companies = self.db.list_companies()
+        values = [f"{c['name']} ({c['id']})" for c in companies]
+        combo["values"] = values
+        if values:
+            combo.current(0)
+        self._company_map = {f"{c['name']} ({c['id']})": c["id"] for c in companies}
+
+    def _attempt_login(self) -> None:
+        """Attempt to authenticate the user."""
+        company_selection = self.login_company_var.get()
+        company_id = self._company_map.get(company_selection) if hasattr(self, "_company_map") else None
+        username = self.login_user_var.get().strip()
+        password = self.login_pass_var.get()
+
+        if not company_id:
+            messagebox.showerror("Login Error", "Please select a company.")
+            return
+        if not username:
+            messagebox.showerror("Login Error", "Please enter a username.")
+            return
+        if not password:
+            messagebox.showerror("Login Error", "Please enter a password.")
+            return
+
+        try:
+            sm = SessionManager(self.db)
+            actor = sm.login(username, password, company_id=company_id)
+            self.current_actor = actor
+            self.current_user = actor.id
+            self.authenticated = True
+
+            # Build the main shell
+            self.login_frame.destroy()
+            self._build_shell()
+            self._load_data()
+            self.show_screen("overview")
+
+        except (ValueError, PermissionError) as exc:
+            messagebox.showerror("Login Error", str(exc))
 
     # ------------------------------------------------------------------
-    # Shell layout
+    # Shell layout (after authentication)
     # ------------------------------------------------------------------
+
     def _build_shell(self) -> None:
+        """Build the main application shell after login."""
         # Container
         self.container = ttk.Frame(self.root, style="App.TFrame")
         self.container.pack(fill="both", expand=True)
@@ -118,7 +234,7 @@ class BIMSpendApp:
             self.logo_frame,
             text="BIMSpend",
             foreground="#FFFFFF",
-            background="#14324A",
+            background=SIDEBAR_BG,
             font=("Segoe UI", 18, "bold"),
         )
         self.logo_label.pack(anchor="w")
@@ -127,56 +243,66 @@ class BIMSpendApp:
             self.logo_frame,
             text="Time & Cost Intelligence",
             foreground="#A9B8C4",
-            background="#14324A",
+            background=SIDEBAR_BG,
             font=("Segoe UI", 10),
         )
         self.subtitle_label.pack(anchor="w", pady=(4, 0))
 
+        # Session info
+        self._build_sidebar_session()
+
         # Navigation divider
-        ttk.Separator(self.sidebar, orient="horizontal").pack(fill="x", padx=20, pady=12)
+        ttk.Separator(self.sidebar, orient="horizontal").pack(fill="x", padx=20, pady=16)
+
+        # Navigation heading
+        ttk.Label(
+            self.sidebar,
+            text="Navigation",
+            foreground="#A9B8C4",
+            background=SIDEBAR_BG,
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w", padx=20, pady=(0, 8))
 
         # Navigation buttons
         self.nav_frame = ttk.Frame(self.sidebar, style="Sidebar.TFrame")
         self.nav_frame.pack(fill="x", padx=4, pady=4)
 
         self.nav_buttons: dict[str, ttk.Button] = {}
-        nav_items = [
-            ("overview", "Overview", "Overview"),
-            ("projects", "Projects", "Projects"),
-            ("project_detail", "Project Detail", "Project Details"),
-            ("activity_timeline", "Activity Timeline", "Activity Timeline"),
-            ("integrations", "Integrations", "Integrations"),
-            ("timesheet_review", "Timesheet Review", "Timesheet Review"),
-            ("team", "Team", "Team"),
-            ("reports", "Reports", "Reports"),
-            ("estimating", "Historical Estimating", "Historical Estimating"),
-            ("designer_review", "Designer Review", "Designer Review"),
-            ("manager_approval", "Manager Approval", "Manager Approval"),
-            ("financial_dashboard", "Financial Dashboard", "Financial Dashboard"),
-            ("project_financial_detail", "Project Financial Detail", "Project Financial Detail"),
-            ("financial_reports", "Financial Reports", "Financial Reports"),
-        ]
+        role = self.current_actor.role.value if self.current_actor else "designer"
+        nav_items = get_visible_nav_items(role)
 
-        for screen_id, label, _ in nav_items:
+        for item in nav_items:
+            screen_id = item["id"]
+            label = item["label"]
+            icon = item.get("icon", "")
+            btn_text = f"{icon}  {label}" if icon else label
             btn = ttk.Button(
                 self.nav_frame,
-                text=label,
+                text=btn_text,
                 style="Nav.TButton",
                 command=lambda sid=screen_id: self.show_screen(sid),
             )
             btn.pack(fill="x", pady=2)
             self.nav_buttons[screen_id] = btn
 
-        # Bottom section: Settings / help
+        # Bottom section: Settings / help / logout
         ttk.Separator(self.sidebar, orient="horizontal").pack(fill="x", padx=20, pady=20)
 
         self.settings_btn = ttk.Button(
             self.nav_frame,
-            text="Settings",
+            text="⚙️  Settings",
             style="Nav.TButton",
             command=self._show_settings,
         )
         self.settings_btn.pack(fill="x", pady=2)
+
+        self.logout_btn = ttk.Button(
+            self.nav_frame,
+            text="🚪  Sign Out",
+            style="Nav.TButton",
+            command=self._logout,
+        )
+        self.logout_btn.pack(fill="x", pady=2)
 
         # Main content area
         self.content = ttk.Frame(self.container, style="App.TFrame")
@@ -186,39 +312,103 @@ class BIMSpendApp:
         self.header = ttk.Frame(self.content, style="Header.TFrame")
         self.header.pack(fill="x", padx=0, pady=0)
 
-        self.page_title = ttk.Label(
-            self.header, text="Overview", style="Title.TLabel"
+        # Breadcrumbs
+        self.breadcrumb_frame = ttk.Frame(self.header, style="Header.TFrame")
+        self.breadcrumb_frame.pack(fill="x", padx=24, pady=(16, 4))
+        self.breadcrumb_label = ttk.Label(
+            self.breadcrumb_frame,
+            text="",
+            font=("Segoe UI", 9),
+            foreground=TEXT_SECONDARY,
+            background=HEADER_BG,
         )
-        self.page_title.pack(anchor="w", padx=24, pady=(20, 4))
+        self.breadcrumb_label.pack(anchor="w")
+
+        # Page title
+        self.page_title = ttk.Label(
+            self.header, text="Executive Dashboard", style="Title.TLabel"
+        )
+        self.page_title.pack(anchor="w", padx=24, pady=(0, 4))
+
+        # Page subtitle + search
+        header_right = ttk.Frame(self.header, style="Header.TFrame")
+        header_right.pack(fill="x", padx=24, pady=(0, 20))
 
         self.page_subtitle = ttk.Label(
-            self.header, text="Synthetic data — demonstration mode", style="Subtitle.TLabel"
+            header_right, text="Synthetic data — demonstration mode", style="Subtitle.TLabel"
         )
-        self.page_subtitle.pack(anchor="w", padx=24, pady=(0, 20))
-        ttk.Label(self.header, text="SYNTHETIC DATA — DEVELOPMENT PREVIEW",
-                  foreground="#9B2C2C", background="#FFFFFF",
-                  font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=24, pady=(0, 8))
+        self.page_subtitle.pack(side="left")
 
-        # Screen container (pages stack here)
+        # Search
+        search_frame = ttk.Frame(header_right, style="Header.TFrame")
+        search_frame.pack(side="right")
+        ttk.Label(
+            search_frame,
+            text="🔍",
+            font=("Segoe UI", 10),
+            background=HEADER_BG,
+        ).pack(side="left", padx=(0, 4))
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(
+            search_frame,
+            textvariable=self.search_var,
+            width=25,
+            style="App.TEntry",
+        )
+        self.search_entry.pack(side="left")
+        self.search_entry.bind("<KeyRelease>", lambda _: self._on_search())
+
+        # Dev preview banner
+        ttk.Label(
+            self.header,
+            text="SYNTHETIC DATA — DEVELOPMENT PREVIEW",
+            foreground="#9B2C2C",
+            background="#FFFFFF",
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w", padx=24, pady=(0, 8))
+
+        # Screen container
         self.screen_container = ttk.Frame(self.content, style="App.TFrame")
         self.screen_container.pack(fill="both", expand=True, padx=24, pady=24)
 
-        # Initialize screens (lazy, created on first show)
-        self.screens: dict[str, Any] = {}
-        self.current_screen: str | None = None
+    def _build_sidebar_session(self) -> None:
+        """Build the session info area in the sidebar."""
+        frame = ttk.Frame(self.sidebar, style="Sidebar.TFrame")
+        frame.pack(fill="x", padx=20, pady=(0, 16))
+
+        actor = current_auth.actor
+        if actor:
+            ttk.Label(
+                frame,
+                text=f"{actor.id}",
+                foreground="#FFFFFF",
+                background=SIDEBAR_BG,
+                font=("Segoe UI", 10, "bold"),
+            ).pack(anchor="w")
+            ttk.Label(
+                frame,
+                text=f"{actor.role.value} · {actor.company_id}",
+                foreground="#A9B8C4",
+                background=SIDEBAR_BG,
+                font=("Segoe UI", 9),
+            ).pack(anchor="w", pady=(2, 0))
+        else:
+            ttk.Label(
+                frame,
+                text="Not authenticated",
+                foreground="#A9B8C4",
+                background=SIDEBAR_BG,
+                font=("Segoe UI", 10),
+            ).pack(anchor="w")
 
     # ------------------------------------------------------------------
     # Data loading
     # ------------------------------------------------------------------
-    def _load_data(self) -> None:
-        """Load projects and activity events into the domain layer.
 
-        Seeds synthetic fixtures on first run so the app works
-        out-of-the-box without real employee data.
-        """
+    def _load_data(self) -> None:
+        """Load projects and activity events into the domain layer."""
         self.projects = self.db.list_projects()
 
-        # Seed projects fixture if empty
         if not self.projects:
             try:
                 with open(_fixture("projects.json"), encoding="utf-8") as fixture:
@@ -233,14 +423,11 @@ class BIMSpendApp:
                     f"Failed to load synthetic project fixtures: {exc}",
                 )
 
-        # Seed activity events fixture if empty
         existing_events = self.db.list_events()
         if not existing_events:
             try:
                 with open(_fixture("events.json"), encoding="utf-8") as fixture:
                     events = [ActivityEvent.from_dict(row) for row in json.load(fixture)]
-                # Correlate synthetic titles in memory before the privacy boundary.
-                # Persistence keeps hashed titles and drops untrusted raw payloads.
                 from bimspend.correlation import correlate_events
                 from bimspend.review import suggest_entry
                 ingested = [ev for ev in events if self.db.ingest_event(ev)]
@@ -263,16 +450,46 @@ class BIMSpendApp:
                 )
 
     # ------------------------------------------------------------------
+    # Breadcrumb management
+    # ------------------------------------------------------------------
+
+    def _add_breadcrumb(self, screen_id: str, label: str) -> None:
+        """Add a breadcrumb entry."""
+        # Avoid duplicates
+        self._breadcrumb_stack = [(sid, lbl) for sid, lbl in self._breadcrumb_stack if sid != screen_id]
+        self._breadcrumb_stack.append((screen_id, label))
+        self._update_breadcrumbs()
+
+    def _update_breadcrumbs(self) -> None:
+        """Update the breadcrumb display."""
+        parts = []
+        for i, (sid, label) in enumerate(self._breadcrumb_stack):
+            if i > 0:
+                parts.append(" › ")
+            parts.append(label)
+        self.breadcrumb_label.config(text="".join(parts))
+
+    def _on_search(self) -> None:
+        """Handle search input changes."""
+        query = self.search_var.get().strip().lower()
+        if self.current_screen and self.current_screen in self.screens:
+            screen = self.screens[self.current_screen]
+            if hasattr(screen, "filter_by_search"):
+                screen.filter_by_search(query)
+
+    # ------------------------------------------------------------------
     # Screen management
     # ------------------------------------------------------------------
+
     def show_screen(self, screen_id: str) -> None:
         """Switch to the given screen."""
-        # Highlight active nav button
-        for sid, btn in self.nav_buttons.items():
-            if sid == screen_id:
-                btn.state(["pressed"])
-            else:
-                btn.state(["!pressed"])
+        # Highlight active nav button (only if shell is built)
+        if self.nav_buttons:
+            for sid, btn in self.nav_buttons.items():
+                if sid == screen_id:
+                    btn.state(["pressed"])
+                else:
+                    btn.state(["!pressed"])
 
         # Hide current screen
         if self.current_screen and self.current_screen in self.screens:
@@ -280,10 +497,37 @@ class BIMSpendApp:
 
         # Create screen if needed
         if screen_id not in self.screens:
+            # Ensure screen_container exists (created by _build_shell after login;
+            # for testing, create a minimal one)
+            if not hasattr(self, "screen_container") or self.screen_container is None:
+                self.screen_container = ttk.Frame(
+                    self.root, style="App.TFrame"
+                )
             self.screens[screen_id] = self._create_screen(screen_id)
+
+        # Update breadcrumbs (only if shell is built)
+        label = NAV_CONFIG.get(screen_id, {}).get("label", screen_id)
+        if screen_id != "overview" and hasattr(self, "breadcrumb_label"):
+            self._add_breadcrumb(screen_id, label)
+        elif screen_id == "overview" and hasattr(self, "breadcrumb_label"):
+            self._breadcrumb_stack = []
+            self._update_breadcrumbs()
 
         self.screens[screen_id].show()
         self.current_screen = screen_id
+
+        # Update page title/subtitle (only if shell is built)
+        if hasattr(self, "page_title"):
+            label = NAV_CONFIG.get(screen_id, {}).get("label", screen_id)
+            self.page_title.config(text=label)
+            if screen_id == "overview":
+                self.page_subtitle.config(text="Company overview — approved time and budget consumption")
+            else:
+                actor = current_auth.actor
+                if actor:
+                    self.page_subtitle.config(text=f"Company: {actor.company_id}  ·  Role: {actor.role.value}")
+                else:
+                    self.page_subtitle.config(text="")
 
     def _create_screen(self, screen_id: str) -> Any:
         """Factory for screen instances (lazy imports to avoid circular deps)."""
@@ -338,8 +582,8 @@ class BIMSpendApp:
             self.page_title.config(text=project.name)
             self.page_subtitle.config(text=f"Client: {project.client}  ·  Project ID: {project.id}")
         else:
-            self.page_title.config(text="Overview")
-            self.page_subtitle.config(text="Synthetic data — demonstration mode")
+            self.page_title.config(text="Executive Dashboard")
+            self.page_subtitle.config(text="Company overview — approved time and budget consumption")
 
     def run(self) -> None:
         self.root.mainloop()
@@ -347,24 +591,29 @@ class BIMSpendApp:
     def _show_settings(self) -> None:
         messagebox.showinfo(
             "Settings",
-            "Settings panel\n\nLocal synthetic data mode.\nNo employee monitoring active.\nNo remote synchronization.",
+            "BIMSpend Settings\n\n"
+            "Local synthetic data mode.\n"
+            "No employee monitoring active.\n"
+            "No remote synchronization.\n"
+            f"Current user: {self.current_user or 'N/A'}\n"
+            f"Company: {self.current_actor.company_id if self.current_actor else 'N/A'}",
         )
 
-    def login(self, username: str, password: str, company_id: str | None = None) -> None:
-        """Authenticate the user and set the current session.
+    def _logout(self) -> None:
+        """Clear the current session and return to login."""
+        if messagebox.askyesno("Sign Out", "Are you sure you want to sign out?"):
+            sm = SessionManager(self.db)
+            sm.logout()
+            self.current_user = None
+            self.current_actor = None
+            self.authenticated = False
+            self.current_screen = None
+            self.screens.clear()
 
-        Raises ValueError if credentials are invalid or company selection
-        is required but not provided.
-        """
-        sm = SessionManager(self.db)
-        actor = sm.login(username, password, company_id=company_id)
-        self.current_user = actor.id
-
-    def logout(self) -> None:
-        """Clear the current session."""
-        sm = SessionManager(self.db)
-        sm.logout()
-        self.current_user = None
+            # Rebuild login
+            for widget in self.root.winfo_children():
+                widget.destroy()
+            self._build_login()
 
     def destroy(self) -> None:
         self.db.close()
