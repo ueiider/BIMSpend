@@ -449,6 +449,182 @@ class BIMSpendApp:
                     f"Failed to load synthetic event fixtures: {exc}",
                 )
 
+        self._seed_demo_auth_and_financials()
+
+    def _seed_demo_auth_and_financials(self) -> None:
+        """Seed synthetic demo auth and financial data if not already present.
+
+        This ensures the Windows preview has working login credentials and
+        representative financial data (approved time, budgets, cost/billing
+        rates) so all screens can be demonstrated. Data is synthetic only;
+        no real employee, client, or financial information is used.
+        """
+        from bimspend.auth import hash_password
+        from bimspend.identity import Role
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        import json
+
+        # Only seed if no companies exist yet (fresh database).
+        if self.db.list_companies():
+            return
+
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+
+            # --- Companies ---
+            self.db.upsert_company("demo_co", "BIMSpend Demo Company", is_active=True)
+
+            # --- Team members ---
+            self.db.upsert_member(__import__("bimspend.models", fromlist=["TeamMember"]).TeamMember(
+                "alice_demo", "Alice Designer", "designer", 55.00, True
+            ))
+            self.db.upsert_member(__import__("bimspend.models", fromlist=["TeamMember"]).TeamMember(
+                "bob_demo", "Bob Manager", "manager", 95.00, True
+            ))
+            self.db.upsert_member(__import__("bimspend.models", fromlist=["TeamMember"]).TeamMember(
+                "carol_demo", "Carol Admin", "administrator", 120.00, True
+            ))
+
+            # --- Company memberships ---
+            self.db.upsert_company_member("demo_co", "alice_demo", "designer")
+            self.db.upsert_company_member("demo_co", "bob_demo", "manager")
+            self.db.upsert_company_member("demo_co", "carol_demo", "administrator")
+
+            # --- User credentials (hashed passwords) ---
+            demo_hash = hash_password("DemoPass123!")
+            self.db.upsert_user_credential("alice_demo", "alice_demo", demo_hash)
+            self.db.upsert_user_credential("bob_demo", "bob_demo", demo_hash)
+            self.db.upsert_user_credential("carol_demo", "carol_demo", demo_hash)
+
+            # --- Employee cost and billing rates ---
+            from bimspend.financial import CostRateService, BudgetService
+            crs = CostRateService(self.db)
+            bs = BudgetService(self.db)
+
+            # Cost rates (effective from start of data range)
+            crs.set_cost_rate(
+                member_id="alice_demo", company_id="demo_co",
+                hourly_cost_aud=Decimal("55.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo rate",
+            )
+            crs.set_cost_rate(
+                member_id="bob_demo", company_id="demo_co",
+                hourly_cost_aud=Decimal("95.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo rate",
+            )
+
+            # Billing rates
+            crs.set_billing_rate(
+                member_id="alice_demo", company_id="demo_co",
+                hourly_billing_aud=Decimal("120.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo rate",
+            )
+            crs.set_billing_rate(
+                member_id="bob_demo", company_id="demo_co",
+                hourly_billing_aud=Decimal("150.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo rate",
+            )
+
+            # --- Project budgets ---
+            bs.create_budget(
+                project_id="proj_001", company_id="demo_co",
+                original_budget_aud=Decimal("15000.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo budget",
+            )
+            bs.create_budget(
+                project_id="proj_002", company_id="demo_co",
+                original_budget_aud=Decimal("20000.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo budget",
+            )
+            bs.create_budget(
+                project_id="proj_003", company_id="demo_co",
+                original_budget_aud=Decimal("12000.00"),
+                effective_from="2026-10-01T00:00:00Z",
+                actor_id="carol_demo",
+                notes="Synthetic demo budget",
+            )
+
+            # --- Approved time entries for financial screens ---
+            from bimspend.models import AttributedTime, TimeEntry, TimeEntryState
+            # Attributed time for proj_001 (alice: 2 hours approved)
+            at1 = AttributedTime(
+                id="at_demo_001", activity_event_id="evt_001",
+                project_id="proj_001", attributed_minutes=120.0,
+                confidence=1.0, correlation_method="synthetic_demo",
+                created_at="2026-10-05T11:00:00Z",
+            )
+            self.db.upsert_attributed_time(at1)
+            entry1 = TimeEntry(
+                id="entry_demo_001", attributed_time_id="at_demo_001",
+                project_id="proj_001", user_id="alice_demo",
+                minutes=120.0, state=TimeEntryState.APPROVED,
+                standard_rate=150.0, loaded_cost_rate=55.0,
+                billed_minutes=0.0, company_id="demo_co",
+                submitted_by="alice_demo", submitted_at="2026-10-05T11:30:00Z",
+                reviewed_by="bob_demo", reviewed_at="2026-10-05T14:00:00Z",
+                created_at="2026-10-05T11:00:00Z",
+            )
+            self.db.upsert_time_entry(entry1, actor_id="alice_demo")
+
+            # Approved time for proj_002 (alice: 1.75 hours approved)
+            at2 = AttributedTime(
+                id="at_demo_002", activity_event_id="evt_002",
+                project_id="proj_002", attributed_minutes=105.0,
+                confidence=1.0, correlation_method="synthetic_demo",
+                created_at="2026-10-05T13:00:00Z",
+            )
+            self.db.upsert_attributed_time(at2)
+            entry2 = TimeEntry(
+                id="entry_demo_002", attributed_time_id="at_demo_002",
+                project_id="proj_002", user_id="alice_demo",
+                minutes=105.0, state=TimeEntryState.APPROVED,
+                standard_rate=175.0, loaded_cost_rate=55.0,
+                billed_minutes=0.0, company_id="demo_co",
+                submitted_by="alice_demo", submitted_at="2026-10-05T13:30:00Z",
+                reviewed_by="bob_demo", reviewed_at="2026-10-05T16:00:00Z",
+                created_at="2026-10-05T13:00:00Z",
+            )
+            self.db.upsert_time_entry(entry2, actor_id="alice_demo")
+
+            # Pending time for proj_003 (bob: 1.5 hours pending review)
+            at3 = AttributedTime(
+                id="at_demo_003", activity_event_id="evt_006",
+                project_id="proj_003", attributed_minutes=90.0,
+                confidence=0.9, correlation_method="synthetic_demo",
+                created_at="2026-10-06T12:30:00Z",
+            )
+            self.db.upsert_attributed_time(at3)
+            entry3 = TimeEntry(
+                id="entry_demo_003", attributed_time_id="at_demo_003",
+                project_id="proj_003", user_id="bob_demo",
+                minutes=90.0, state=TimeEntryState.PENDING_REVIEW,
+                standard_rate=160.0, loaded_cost_rate=95.0,
+                billed_minutes=0.0, company_id="demo_co",
+                submitted_by=None, submitted_at=None,
+                reviewed_by=None, reviewed_at=None,
+                created_at="2026-10-06T12:30:00Z",
+            )
+            self.db.upsert_time_entry(entry3, actor_id="bob_demo")
+
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(
+                "Seed Data Error",
+                f"Failed to seed demo auth and financial data: {exc}",
+            )
+
     # ------------------------------------------------------------------
     # Breadcrumb management
     # ------------------------------------------------------------------
