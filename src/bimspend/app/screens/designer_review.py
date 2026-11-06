@@ -304,10 +304,10 @@ class DesignerReviewScreen(BaseScreen):
             anchor="w", padx=(16, 0)
         )
 
-        ttk.Label(dialog, text="Review Notes:").pack(anchor="w", padx=(16, pady=(12, 2)))
+        ttk.Label(dialog, text="Review Notes:").pack(anchor="w", padx=(16, 0), pady=(12, 2))
         notes_var = tk.StringVar(value=suggestion.review_notes or "")
         ttk.Entry(dialog, textvariable=notes_var, width=40).pack(
-            anchor="w", padx=(16, pady=(0, 16))
+            anchor="w", padx=(16, 0), pady=(0, 16)
         )
 
         def _save():
