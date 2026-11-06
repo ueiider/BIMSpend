@@ -24,6 +24,8 @@ Schema versions:
       Revit session tracking, document identity, and project correlation.
   v8: Automatic timesheet suggestions — added time_entry_suggestions table
       for auto-generated time entry suggestions awaiting designer review.
+  v9: Suggestion decision audit — added suggestion_decisions table for
+      audit trail of submit/approve/reject/return_for_correction/split/merge.
 """
 
 from __future__ import annotations
@@ -87,9 +89,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 8:
+            if version is not None and version > 9:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 8")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 9")
         self._create_tables()
         self._migrate()
 
@@ -543,6 +545,38 @@ class Database:
                 )
                 self.conn.execute(
                     "INSERT INTO schema_version(version,applied_at) VALUES (8,?)", (_now_iso(),))
+        # v9 migration: suggestion decision audit — suggestion_decisions table
+        # for audit trail of submit/approve/reject/return_for_correction/split/merge.
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 9").fetchone():
+            with self.transaction():
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS suggestion_decisions (
+                        id TEXT PRIMARY KEY,
+                        suggestion_id TEXT NOT NULL REFERENCES time_entry_suggestions(id),
+                        actor_id TEXT NOT NULL,
+                        actor_company_id TEXT NOT NULL,
+                        action TEXT NOT NULL CHECK(action IN ('submit', 'approve', 'reject', 'return_for_correction', 'split', 'merge')),
+                        previous_state TEXT,
+                        new_state TEXT NOT NULL,
+                        previous_minutes REAL,
+                        new_minutes REAL,
+                        notes TEXT,
+                        recorded_at TEXT NOT NULL
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestion_decisions_suggestion ON suggestion_decisions(suggestion_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestion_decisions_actor ON suggestion_decisions(actor_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestion_decisions_action ON suggestion_decisions(action)"
+                )
+                self.conn.execute(
+                    "INSERT INTO schema_version(version,applied_at) VALUES (9,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
