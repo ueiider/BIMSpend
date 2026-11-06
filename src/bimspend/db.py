@@ -26,6 +26,10 @@ Schema versions:
       for auto-generated time entry suggestions awaiting designer review.
   v9: Suggestion decision audit — added suggestion_decisions table for
       audit trail of submit/approve/reject/return_for_correction/split/merge.
+  v10: Financial management — added employee_cost_rates, employee_billing_rates,
+      project_budgets, budget_revisions, financial_adjustments, and
+      financial_audit_events tables for project costing, budget consumption,
+      and financial reporting.
 """
 
 from __future__ import annotations
@@ -39,12 +43,20 @@ import time
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 from typing import Any, Optional
 
 from .models import (
     ActivityEvent,
+    AdjustmentType,
     AttributedTime,
+    BudgetRevision,
+    EmployeeBillingRate,
+    EmployeeCostRate,
+    FinancialAdjustment,
+    FinancialSummary,
     Project,
+    ProjectBudget,
     TeamMember,
     TimeEntry,
     TimeEntryState,
@@ -89,9 +101,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 9:
+            if version is not None and version > 10:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 9")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 10")
         self._create_tables()
         self._migrate()
 
@@ -577,6 +589,162 @@ class Database:
                 )
                 self.conn.execute(
                     "INSERT INTO schema_version(version,applied_at) VALUES (9,?)", (_now_iso(),))
+        # v10 migration: financial management tables
+        # employee_cost_rates, employee_billing_rates, project_budgets,
+        # budget_revisions, financial_adjustments, financial_audit_events
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 10").fetchone():
+            with self.transaction():
+                # Employee cost rates — historical rate tracking with effective dates
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS employee_cost_rates (
+                        id TEXT PRIMARY KEY,
+                        member_id TEXT NOT NULL REFERENCES team_members(id),
+                        company_id TEXT NOT NULL REFERENCES companies(id),
+                        hourly_cost_aud REAL NOT NULL,
+                        effective_from TEXT NOT NULL,
+                        effective_to TEXT,
+                        created_by TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        notes TEXT,
+                        CHECK(hourly_cost_aud >= 0)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_employee_cost_rates_member ON employee_cost_rates(member_id, effective_from)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_employee_cost_rates_company ON employee_cost_rates(company_id)"
+                )
+
+                # Employee billing rates — historical billing rate tracking with effective dates
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS employee_billing_rates (
+                        id TEXT PRIMARY KEY,
+                        member_id TEXT NOT NULL REFERENCES team_members(id),
+                        company_id TEXT NOT NULL REFERENCES companies(id),
+                        hourly_billing_aud REAL NOT NULL,
+                        effective_from TEXT NOT NULL,
+                        effective_to TEXT,
+                        created_by TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        notes TEXT,
+                        CHECK(hourly_billing_aud >= 0)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_employee_billing_rates_member ON employee_billing_rates(member_id, effective_from)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_employee_billing_rates_company ON employee_billing_rates(company_id)"
+                )
+
+                # Project budgets — original and current budget per project
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS project_budgets (
+                        id TEXT PRIMARY KEY,
+                        project_id TEXT NOT NULL REFERENCES projects(id),
+                        company_id TEXT NOT NULL REFERENCES companies(id),
+                        original_budget_aud REAL NOT NULL,
+                        current_budget_aud REAL NOT NULL,
+                        budget_currency TEXT NOT NULL DEFAULT 'AUD',
+                        project_status TEXT NOT NULL DEFAULT 'active',
+                        budget_owner_id TEXT REFERENCES team_members(id),
+                        effective_from TEXT NOT NULL,
+                        effective_to TEXT,
+                        created_by TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        notes TEXT,
+                        CHECK(original_budget_aud >= 0),
+                        CHECK(current_budget_aud >= 0)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_project_budgets_project ON project_budgets(project_id, effective_from)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_project_budgets_company ON project_budgets(company_id)"
+                )
+
+                # Budget revisions — auditable revision history
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS budget_revisions (
+                        id TEXT PRIMARY KEY,
+                        project_budget_id TEXT NOT NULL REFERENCES project_budgets(id),
+                        revision_number INTEGER NOT NULL,
+                        previous_budget_aud REAL NOT NULL,
+                        new_budget_aud REAL NOT NULL,
+                        revision_reason TEXT NOT NULL,
+                        created_by TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        CHECK(previous_budget_aud >= 0),
+                        CHECK(new_budget_aud >= 0)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_budget_revisions_budget ON budget_revisions(project_budget_id, revision_number)"
+                )
+
+                # Financial adjustments — manual financial corrections
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS financial_adjustments (
+                        id TEXT PRIMARY KEY,
+                        entry_id TEXT REFERENCES time_entries(id),
+                        project_id TEXT NOT NULL REFERENCES projects(id),
+                        company_id TEXT NOT NULL REFERENCES companies(id),
+                        adjustment_type TEXT NOT NULL CHECK(adjustment_type IN ('cost', 'credit', 'writeoff', 'accrual')),
+                        amount_aud REAL NOT NULL,
+                        adjustment_date TEXT NOT NULL,
+                        created_by TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        notes TEXT,
+                        CHECK(amount_aud >= 0)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_financial_adjustments_project ON financial_adjustments(project_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_financial_adjustments_entry ON financial_adjustments(entry_id)"
+                )
+
+                # Financial audit events — audit trail for all financial changes
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS financial_audit_events (
+                        id TEXT PRIMARY KEY,
+                        actor_id TEXT NOT NULL,
+                        actor_company_id TEXT NOT NULL,
+                        action TEXT NOT NULL,
+                        entity_type TEXT NOT NULL,
+                        entity_id TEXT NOT NULL,
+                        previous_values TEXT,
+                        new_values TEXT,
+                        recorded_at TEXT NOT NULL
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_financial_audit_actor ON financial_audit_events(actor_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_financial_audit_entity ON financial_audit_events(entity_type, entity_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_financial_audit_recorded ON financial_audit_events(recorded_at)"
+                )
+
+                self.conn.execute(
+                    "INSERT INTO schema_version(version,applied_at) VALUES (10,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -1027,6 +1195,482 @@ class Database:
             time_entry_id=row["time_entry_id"],
             created_at=row["created_at"],
         )
+
+    # ------------------------------------------------------------------
+    # Employee cost rates (R1-07 financial management)
+    # ------------------------------------------------------------------
+    @atomic_write
+    def upsert_employee_cost_rate(self, rate: EmployeeCostRate) -> None:
+        """Insert or update an employee cost rate."""
+        self.conn.execute(
+            """
+            INSERT INTO employee_cost_rates
+                (id, member_id, company_id, hourly_cost_aud, effective_from,
+                 effective_to, created_by, created_at, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                member_id=excluded.member_id,
+                company_id=excluded.company_id,
+                hourly_cost_aud=excluded.hourly_cost_aud,
+                effective_from=excluded.effective_from,
+                effective_to=excluded.effective_to,
+                created_by=excluded.created_by,
+                created_at=excluded.created_at,
+                notes=excluded.notes
+            """,
+            (
+                rate.id,
+                rate.member_id,
+                rate.company_id,
+                str(rate.hourly_cost_aud),
+                rate.effective_from,
+                rate.effective_to,
+                rate.created_by,
+                rate.created_at,
+                rate.notes,
+            ),
+        )
+        self._commit()
+
+    def get_employee_cost_rate(self, rate_id: str) -> EmployeeCostRate | None:
+        row = self.conn.execute(
+            "SELECT * FROM employee_cost_rates WHERE id = ?", (rate_id,)
+        ).fetchone()
+        return self._row_to_employee_cost_rate(row) if row else None
+
+    def list_employee_cost_rates(
+        self, member_id: str | None = None, company_id: str | None = None
+    ) -> list[EmployeeCostRate]:
+        where = []
+        params: list[Any] = []
+        if member_id:
+            where.append("member_id = ?")
+            params.append(member_id)
+        if company_id:
+            where.append("company_id = ?")
+            params.append(company_id)
+        sql = "SELECT * FROM employee_cost_rates"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY effective_from DESC"
+        rows = self.conn.execute(sql, params).fetchall()
+        return [self._row_to_employee_cost_rate(r) for r in rows]
+
+    def get_effective_employee_cost_rate(
+        self, member_id: str, company_id: str, at: str
+    ) -> EmployeeCostRate | None:
+        """Get the cost rate effective for a member at a given timestamp.
+
+        Selects the rate with the latest effective_from <= at where
+        effective_to is NULL or > at.
+        """
+        rows = self.conn.execute(
+            """
+            SELECT * FROM employee_cost_rates
+            WHERE member_id = ? AND company_id = ?
+              AND effective_from <= ?
+              AND (effective_to IS NULL OR effective_to > ?)
+            ORDER BY effective_from DESC
+            LIMIT 1
+            """,
+            (member_id, company_id, at, at),
+        ).fetchall()
+        return self._row_to_employee_cost_rate(rows[0]) if rows else None
+
+    @staticmethod
+    def _row_to_employee_cost_rate(row: sqlite3.Row) -> EmployeeCostRate:
+        return EmployeeCostRate(
+            id=row["id"],
+            member_id=row["member_id"],
+            company_id=row["company_id"],
+            hourly_cost_aud=Decimal(str(row["hourly_cost_aud"])),
+            effective_from=row["effective_from"],
+            effective_to=row["effective_to"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            notes=row["notes"],
+        )
+
+    # ------------------------------------------------------------------
+    # Employee billing rates (R1-07 financial management)
+    # ------------------------------------------------------------------
+    @atomic_write
+    def upsert_employee_billing_rate(self, rate: EmployeeBillingRate) -> None:
+        """Insert or update an employee billing rate."""
+        self.conn.execute(
+            """
+            INSERT INTO employee_billing_rates
+                (id, member_id, company_id, hourly_billing_aud, effective_from,
+                 effective_to, created_by, created_at, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                member_id=excluded.member_id,
+                company_id=excluded.company_id,
+                hourly_billing_aud=excluded.hourly_billing_aud,
+                effective_from=excluded.effective_from,
+                effective_to=excluded.effective_to,
+                created_by=excluded.created_by,
+                created_at=excluded.created_at,
+                notes=excluded.notes
+            """,
+            (
+                rate.id,
+                rate.member_id,
+                rate.company_id,
+                str(rate.hourly_billing_aud),
+                rate.effective_from,
+                rate.effective_to,
+                rate.created_by,
+                rate.created_at,
+                rate.notes,
+            ),
+        )
+        self._commit()
+
+    def get_employee_billing_rate(self, rate_id: str) -> EmployeeBillingRate | None:
+        row = self.conn.execute(
+            "SELECT * FROM employee_billing_rates WHERE id = ?", (rate_id,)
+        ).fetchone()
+        return self._row_to_employee_billing_rate(row) if row else None
+
+    def list_employee_billing_rates(
+        self, member_id: str | None = None, company_id: str | None = None
+    ) -> list[EmployeeBillingRate]:
+        where = []
+        params: list[Any] = []
+        if member_id:
+            where.append("member_id = ?")
+            params.append(member_id)
+        if company_id:
+            where.append("company_id = ?")
+            params.append(company_id)
+        sql = "SELECT * FROM employee_billing_rates"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY effective_from DESC"
+        rows = self.conn.execute(sql, params).fetchall()
+        return [self._row_to_employee_billing_rate(r) for r in rows]
+
+    def get_effective_employee_billing_rate(
+        self, member_id: str, company_id: str, at: str
+    ) -> EmployeeBillingRate | None:
+        """Get the billing rate effective for a member at a given timestamp."""
+        rows = self.conn.execute(
+            """
+            SELECT * FROM employee_billing_rates
+            WHERE member_id = ? AND company_id = ?
+              AND effective_from <= ?
+              AND (effective_to IS NULL OR effective_to > ?)
+            ORDER BY effective_from DESC
+            LIMIT 1
+            """,
+            (member_id, company_id, at, at),
+        ).fetchall()
+        return self._row_to_employee_billing_rate(rows[0]) if rows else None
+
+    @staticmethod
+    def _row_to_employee_billing_rate(row: sqlite3.Row) -> EmployeeBillingRate:
+        return EmployeeBillingRate(
+            id=row["id"],
+            member_id=row["member_id"],
+            company_id=row["company_id"],
+            hourly_billing_aud=Decimal(str(row["hourly_billing_aud"])),
+            effective_from=row["effective_from"],
+            effective_to=row["effective_to"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            notes=row["notes"],
+        )
+
+    # ------------------------------------------------------------------
+    # Project budgets (R1-07 financial management)
+    # ------------------------------------------------------------------
+    @atomic_write
+    def upsert_project_budget(self, budget: ProjectBudget) -> None:
+        """Insert or update a project budget."""
+        self.conn.execute(
+            """
+            INSERT INTO project_budgets
+                (id, project_id, company_id, original_budget_aud, current_budget_aud,
+                 budget_currency, project_status, budget_owner_id, effective_from,
+                 effective_to, created_by, created_at, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                project_id=excluded.project_id,
+                company_id=excluded.company_id,
+                original_budget_aud=excluded.original_budget_aud,
+                current_budget_aud=excluded.current_budget_aud,
+                budget_currency=excluded.budget_currency,
+                project_status=excluded.project_status,
+                budget_owner_id=excluded.budget_owner_id,
+                effective_from=excluded.effective_from,
+                effective_to=excluded.effective_to,
+                created_by=excluded.created_by,
+                created_at=excluded.created_at,
+                notes=excluded.notes
+            """,
+            (
+                budget.id,
+                budget.project_id,
+                budget.company_id,
+                str(budget.original_budget_aud),
+                str(budget.current_budget_aud),
+                budget.budget_currency,
+                budget.project_status,
+                budget.budget_owner_id,
+                budget.effective_from,
+                budget.effective_to,
+                budget.created_by,
+                budget.created_at,
+                budget.notes,
+            ),
+        )
+        self._commit()
+
+    def get_project_budget(self, budget_id: str) -> ProjectBudget | None:
+        row = self.conn.execute(
+            "SELECT * FROM project_budgets WHERE id = ?", (budget_id,)
+        ).fetchone()
+        return self._row_to_project_budget(row) if row else None
+
+    def list_project_budgets(
+        self, project_id: str | None = None, company_id: str | None = None
+    ) -> list[ProjectBudget]:
+        where = []
+        params: list[Any] = []
+        if project_id:
+            where.append("project_id = ?")
+            params.append(project_id)
+        if company_id:
+            where.append("company_id = ?")
+            params.append(company_id)
+        sql = "SELECT * FROM project_budgets"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY effective_from DESC"
+        rows = self.conn.execute(sql, params).fetchall()
+        return [self._row_to_project_budget(r) for r in rows]
+
+    def get_current_project_budget(
+        self, project_id: str, company_id: str, at: str | None = None
+    ) -> ProjectBudget | None:
+        """Get the current budget for a project at a given timestamp."""
+        if at is None:
+            at = _now_iso()
+        rows = self.conn.execute(
+            """
+            SELECT * FROM project_budgets
+            WHERE project_id = ? AND company_id = ?
+              AND effective_from <= ?
+              AND (effective_to IS NULL OR effective_to > ?)
+            ORDER BY effective_from DESC
+            LIMIT 1
+            """,
+            (project_id, company_id, at, at),
+        ).fetchall()
+        return self._row_to_project_budget(rows[0]) if rows else None
+
+    @staticmethod
+    def _row_to_project_budget(row: sqlite3.Row) -> ProjectBudget:
+        return ProjectBudget(
+            id=row["id"],
+            project_id=row["project_id"],
+            company_id=row["company_id"],
+            original_budget_aud=Decimal(str(row["original_budget_aud"])),
+            current_budget_aud=Decimal(str(row["current_budget_aud"])),
+            budget_currency=row["budget_currency"],
+            project_status=row["project_status"],
+            budget_owner_id=row["budget_owner_id"],
+            effective_from=row["effective_from"],
+            effective_to=row["effective_to"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            notes=row["notes"],
+        )
+
+    # ------------------------------------------------------------------
+    # Budget revisions (R1-07 financial management)
+    # ------------------------------------------------------------------
+    @atomic_write
+    def upsert_budget_revision(self, revision: BudgetRevision) -> None:
+        """Insert a budget revision record."""
+        self.conn.execute(
+            """
+            INSERT INTO budget_revisions
+                (id, project_budget_id, revision_number, previous_budget_aud,
+                 new_budget_aud, revision_reason, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                revision.id,
+                revision.project_budget_id,
+                revision.revision_number,
+                str(revision.previous_budget_aud),
+                str(revision.new_budget_aud),
+                revision.revision_reason,
+                revision.created_by,
+                revision.created_at,
+            ),
+        )
+        self._commit()
+
+    def list_budget_revisions(self, project_budget_id: str) -> list[BudgetRevision]:
+        rows = self.conn.execute(
+            """
+            SELECT * FROM budget_revisions
+            WHERE project_budget_id = ?
+            ORDER BY revision_number
+            """,
+            (project_budget_id,),
+        ).fetchall()
+        return [self._row_to_budget_revision(r) for r in rows]
+
+    @staticmethod
+    def _row_to_budget_revision(row: sqlite3.Row) -> BudgetRevision:
+        return BudgetRevision(
+            id=row["id"],
+            project_budget_id=row["project_budget_id"],
+            revision_number=row["revision_number"],
+            previous_budget_aud=Decimal(str(row["previous_budget_aud"])),
+            new_budget_aud=Decimal(str(row["new_budget_aud"])),
+            revision_reason=row["revision_reason"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+        )
+
+    # ------------------------------------------------------------------
+    # Financial adjustments (R1-07 financial management)
+    # ------------------------------------------------------------------
+    @atomic_write
+    def upsert_financial_adjustment(self, adj: FinancialAdjustment) -> None:
+        """Insert or update a financial adjustment."""
+        self.conn.execute(
+            """
+            INSERT INTO financial_adjustments
+                (id, entry_id, project_id, company_id, adjustment_type,
+                 amount_aud, adjustment_date, created_by, created_at, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                entry_id=excluded.entry_id,
+                project_id=excluded.project_id,
+                company_id=excluded.company_id,
+                adjustment_type=excluded.adjustment_type,
+                amount_aud=excluded.amount_aud,
+                adjustment_date=excluded.adjustment_date,
+                created_by=excluded.created_by,
+                created_at=excluded.created_at,
+                notes=excluded.notes
+            """,
+            (
+                adj.id,
+                adj.entry_id,
+                adj.project_id,
+                adj.company_id,
+                adj.adjustment_type.value,
+                str(adj.amount_aud),
+                adj.adjustment_date,
+                adj.created_by,
+                adj.created_at,
+                adj.notes,
+            ),
+        )
+        self._commit()
+
+    def get_financial_adjustment(self, adj_id: str) -> FinancialAdjustment | None:
+        row = self.conn.execute(
+            "SELECT * FROM financial_adjustments WHERE id = ?", (adj_id,)
+        ).fetchone()
+        return self._row_to_financial_adjustment(row) if row else None
+
+    def list_financial_adjustments(
+        self, project_id: str | None = None, company_id: str | None = None
+    ) -> list[FinancialAdjustment]:
+        where = []
+        params: list[Any] = []
+        if project_id:
+            where.append("project_id = ?")
+            params.append(project_id)
+        if company_id:
+            where.append("company_id = ?")
+            params.append(company_id)
+        sql = "SELECT * FROM financial_adjustments"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY adjustment_date DESC"
+        rows = self.conn.execute(sql, params).fetchall()
+        return [self._row_to_financial_adjustment(r) for r in rows]
+
+    @staticmethod
+    def _row_to_financial_adjustment(row: sqlite3.Row) -> FinancialAdjustment:
+        return FinancialAdjustment(
+            id=row["id"],
+            entry_id=row["entry_id"],
+            project_id=row["project_id"],
+            company_id=row["company_id"],
+            adjustment_type=AdjustmentType(row["adjustment_type"]),
+            amount_aud=Decimal(str(row["amount_aud"])),
+            adjustment_date=row["adjustment_date"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            notes=row["notes"],
+        )
+
+    # ------------------------------------------------------------------
+    # Financial audit events (R1-07 financial management)
+    # ------------------------------------------------------------------
+    @atomic_write
+    def record_financial_audit_event(
+        self,
+        actor_id: str,
+        actor_company_id: str,
+        action: str,
+        entity_type: str,
+        entity_id: str,
+        previous_values: Optional[dict[str, Any]] = None,
+        new_values: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Record a financial audit event."""
+        import json
+        import secrets
+
+        self.conn.execute(
+            """
+            INSERT INTO financial_audit_events
+                (id, actor_id, actor_company_id, action, entity_type,
+                 entity_id, previous_values, new_values, recorded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"fea-{secrets.token_urlsafe(8)}",
+                actor_id,
+                actor_company_id,
+                action,
+                entity_type,
+                entity_id,
+                json.dumps(previous_values) if previous_values else None,
+                json.dumps(new_values) if new_values else None,
+                _now_iso(),
+            ),
+        )
+        self._commit()
+
+    def list_financial_audit_events(
+        self, entity_type: str | None = None, entity_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        where = []
+        params: list[Any] = []
+        if entity_type:
+            where.append("entity_type = ?")
+            params.append(entity_type)
+        if entity_id:
+            where.append("entity_id = ?")
+            params.append(entity_id)
+        sql = "SELECT * FROM financial_audit_events"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY recorded_at DESC"
+        rows = self.conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Authentication and session management

@@ -152,6 +152,9 @@ class BIMSpendApp:
             ("estimating", "Historical Estimating", "Historical Estimating"),
             ("designer_review", "Designer Review", "Designer Review"),
             ("manager_approval", "Manager Approval", "Manager Approval"),
+            ("financial_dashboard", "Financial Dashboard", "Financial Dashboard"),
+            ("project_financial_detail", "Project Financial Detail", "Project Financial Detail"),
+            ("financial_reports", "Financial Reports", "Financial Reports"),
         ]
 
         for screen_id, label, _ in nav_items:
@@ -317,6 +320,15 @@ class BIMSpendApp:
         if screen_id == "manager_approval":
             from .screens.manager_approval import ManagerApprovalScreen
             return ManagerApprovalScreen(self.screen_container, self)
+        if screen_id == "financial_dashboard":
+            from .screens.financial_dashboard import FinancialDashboardScreen
+            return FinancialDashboardScreen(self.screen_container, self)
+        if screen_id == "project_financial_detail":
+            from .screens.project_financial_detail import ProjectFinancialDetailScreen
+            return ProjectFinancialDetailScreen(self.screen_container, self)
+        if screen_id == "financial_reports":
+            from .screens.financial_reports import FinancialReportsScreen
+            return FinancialReportsScreen(self.screen_container, self)
         raise ValueError(f"Unknown screen: {screen_id}")
 
     def set_project(self, project: Project | None) -> None:

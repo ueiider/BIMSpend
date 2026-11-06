@@ -21,7 +21,8 @@ Build status: **AUTHORIZED — owner approved 2026-11-05; B2-A audit deferred, n
 | R1-01/R1-02/R1-03 | ActivityWatch source reuse, native Windows capture, AFK/session-lock/heartbeat | DONE | Branch build/bimspend-r1-native-capture at 70d4074fc82853a0a80b9d375c691cbc70f0f303; 113 domain tests + 7 GUI tests passed; schema v6; ActivityWatch-derived code in src/bimspend/capture/activitywatch_derived/ (MPL-2.0); source manifest at docs/open-source/ACTIVITYWATCH_SOURCE_MANIFEST.md |
 | R1-04 | Native Revit activity detection and project correlation | DONE | Branch build/bimspend-r1-04-revit-correlation at 8be6e927808c4a76063ea9f7bfc4ab49b0aada98; 126 domain tests + 45 GUI+capture tests passed; schema v7; Revit connector, IPC channel, correlation engine implemented |
 | R1-05 | Automatic time entry suggestion engine | DONE | Branch build/bimspend-r1-05-timesheet-suggestions at 68ca19c6041ccaee4200a26ae9f468d87c863bfa; 139 domain tests + 58 GUI+capture tests passed; schema v8; SuggestionEngine, SuggestionConfig, TimeEntrySuggestion implemented with deterministic ID generation, company-scoped authorization, submit/reject workflow |
-| R1-06 | Designer review and manager approval UI | DONE | Branch build/bimspend-r1-06-review-approval-ui at 0ae3d9895fc8b73240851012eb0b27cf144afe68; 146 domain tests passed; schema v9; SuggestionService domain service with submit/approve/reject/return_for_correction/split/merge; DesignerReviewScreen and ManagerApprovalScreen added; suggestion_decisions audit table; CI workflow updated to include branch |
+| R1-06 | Designer review and manager approval UI | DONE | Branch build/bimspend-r1-06-review-approval-ui at eada297f197fc9e46f5e89462d4123929eddc813; 146 domain tests passed; schema v9; SuggestionService domain service with submit/approve/reject/return_for_correction/split/merge; DesignerReviewScreen and ManagerApprovalScreen added; suggestion_decisions audit table; CI workflow updated to include branch; CI syntax fix applied |
+| R1-07 | Project costing, budget control and financial reporting | IN PROGRESS | Branch build/bimspend-r1-07-financial-integration based on R1-06 at eada297f197fc9e46f5e89462d4123929eddc813 |
 | B3-01 | Prototype end-to-end event -> project -> manager report | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; vertical slice implemented in build branch |
 
 ## Audit conclusion
@@ -30,7 +31,7 @@ Preferred direction: Miru administrative foundation + existing Miru agent API; A
 
 ## Next single action
 
-**R1-06 complete.** Designer review screen, manager approval screen, suggestion domain service, and v9 audit migration implemented and verified. All 146 domain tests pass. Recommended next milestone: R1-07 — Project Costing, Budget Consumption, and Financial Reporting Integration.
+**R1-07 in progress.** Implementing project costing, budget control, employee cost/billing rates, financial dashboard, and reporting. Gate A (CI stabilization) complete — CI syntax fix committed at eada297f197fc9e46f5e89462d4123929eddc813. All 146 domain tests + 7 GUI tests pass.
 
 ## Working rules
 

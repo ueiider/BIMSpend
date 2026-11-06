@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Optional
 
@@ -441,4 +442,297 @@ class UserIdentityMap:
             "mapped_at": self.mapped_at,
             "reason": self.reason,
             "created_at": self.created_at,
+        }
+
+
+# ------------------------------------------------------------------
+# Financial management models (R1-07)
+# ------------------------------------------------------------------
+
+
+class AdjustmentType(str, Enum):
+    """Types of financial adjustments."""
+    COST = "cost"
+    CREDIT = "credit"
+    WRITEOFF = "writeoff"
+    ACCRUAL = "accrual"
+
+
+@dataclass
+class EmployeeCostRate:
+    """Employee internal labour cost rate with effective date range.
+
+    Historical rate preservation: rates are never silently rewritten.
+    New rates create new records with effective_from dates. The rate
+    effective at a given time is selected by effective_from <= target
+    and (effective_to IS NULL OR effective_to > target).
+    """
+
+    id: str
+    member_id: str  # team_members.id
+    company_id: str  # company scope for tenant isolation
+    hourly_cost_aud: Decimal  # internal cost per hour in AUD
+    effective_from: str  # ISO-8601 UTC
+    effective_to: Optional[str] = None  # NULL = current rate
+    created_by: str = ""  # actor who created this rate
+    created_at: str = ""
+    notes: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "member_id": self.member_id,
+            "company_id": self.company_id,
+            "hourly_cost_aud": str(self.hourly_cost_aud),
+            "effective_from": self.effective_from,
+            "effective_to": self.effective_to,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "EmployeeCostRate":
+        return cls(
+            id=data["id"],
+            member_id=data["member_id"],
+            company_id=data["company_id"],
+            hourly_cost_aud=Decimal(str(data["hourly_cost_aud"])),
+            effective_from=data["effective_from"],
+            effective_to=data.get("effective_to"),
+            created_by=data.get("created_by", ""),
+            created_at=data.get("created_at", ""),
+            notes=data.get("notes"),
+        )
+
+
+@dataclass
+class EmployeeBillingRate:
+    """Employee client billing rate with effective date range.
+
+    Historical rate preservation: same pattern as EmployeeCostRate.
+    """
+
+    id: str
+    member_id: str  # team_members.id
+    company_id: str  # company scope for tenant isolation
+    hourly_billing_aud: Decimal  # billing rate per hour in AUD
+    effective_from: str  # ISO-8601 UTC
+    effective_to: Optional[str] = None  # NULL = current rate
+    created_by: str = ""
+    created_at: str = ""
+    notes: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "member_id": self.member_id,
+            "company_id": self.company_id,
+            "hourly_billing_aud": str(self.hourly_billing_aud),
+            "effective_from": self.effective_from,
+            "effective_to": self.effective_to,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "EmployeeBillingRate":
+        return cls(
+            id=data["id"],
+            member_id=data["member_id"],
+            company_id=data["company_id"],
+            hourly_billing_aud=Decimal(str(data["hourly_billing_aud"])),
+            effective_from=data["effective_from"],
+            effective_to=data.get("effective_to"),
+            created_by=data.get("created_by", ""),
+            created_at=data.get("created_at", ""),
+            notes=data.get("notes"),
+        )
+
+
+@dataclass
+class ProjectBudget:
+    """Project financial configuration with budget tracking.
+
+    Original budget is preserved; current budget reflects revisions.
+    Labour budget tracked independently from total project budget.
+    """
+
+    id: str
+    project_id: str  # projects.id
+    company_id: str  # company scope for tenant isolation
+    original_budget_aud: Decimal
+    current_budget_aud: Decimal
+    budget_currency: str = "AUD"
+    project_status: str = "active"  # active, on_hold, completed, cancelled
+    budget_owner_id: Optional[str] = None  # team_members.id
+    effective_from: str = ""
+    effective_to: Optional[str] = None
+    created_by: str = ""
+    created_at: str = ""
+    notes: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "company_id": self.company_id,
+            "original_budget_aud": str(self.original_budget_aud),
+            "current_budget_aud": str(self.current_budget_aud),
+            "budget_currency": self.budget_currency,
+            "project_status": self.project_status,
+            "budget_owner_id": self.budget_owner_id,
+            "effective_from": self.effective_from,
+            "effective_to": self.effective_to,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ProjectBudget":
+        return cls(
+            id=data["id"],
+            project_id=data["project_id"],
+            company_id=data["company_id"],
+            original_budget_aud=Decimal(str(data["original_budget_aud"])),
+            current_budget_aud=Decimal(str(data["current_budget_aud"])),
+            budget_currency=data.get("budget_currency", "AUD"),
+            project_status=data.get("project_status", "active"),
+            budget_owner_id=data.get("budget_owner_id"),
+            effective_from=data.get("effective_from", ""),
+            effective_to=data.get("effective_to"),
+            created_by=data.get("created_by", ""),
+            created_at=data.get("created_at", ""),
+            notes=data.get("notes"),
+        )
+
+
+@dataclass
+class BudgetRevision:
+    """Auditable budget revision history."""
+
+    id: str
+    project_budget_id: str  # project_budgets.id
+    revision_number: int
+    previous_budget_aud: Decimal
+    new_budget_aud: Decimal
+    revision_reason: str
+    created_by: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_budget_id": self.project_budget_id,
+            "revision_number": self.revision_number,
+            "previous_budget_aud": str(self.previous_budget_aud),
+            "new_budget_aud": str(self.new_budget_aud),
+            "revision_reason": self.revision_reason,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BudgetRevision":
+        return cls(
+            id=data["id"],
+            project_budget_id=data["project_budget_id"],
+            revision_number=int(data["revision_number"]),
+            previous_budget_aud=Decimal(str(data["previous_budget_aud"])),
+            new_budget_aud=Decimal(str(data["new_budget_aud"])),
+            revision_reason=data["revision_reason"],
+            created_by=data["created_by"],
+            created_at=data["created_at"],
+        )
+
+
+@dataclass
+class FinancialAdjustment:
+    """Manual financial adjustment/correction.
+
+    Adjustments are traceable to an authorized actor and company.
+    Never creates duplicate records for the same entry.
+    """
+
+    id: str
+    entry_id: Optional[str]  # time_entries.id (NULL for project-level adjustments)
+    project_id: str  # projects.id
+    company_id: str  # company scope
+    adjustment_type: AdjustmentType
+    amount_aud: Decimal
+    adjustment_date: str  # ISO-8601 UTC
+    created_by: str
+    created_at: str
+    notes: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "entry_id": self.entry_id,
+            "project_id": self.project_id,
+            "company_id": self.company_id,
+            "adjustment_type": self.adjustment_type.value,
+            "amount_aud": str(self.amount_aud),
+            "adjustment_date": self.adjustment_date,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FinancialAdjustment":
+        return cls(
+            id=data["id"],
+            entry_id=data.get("entry_id"),
+            project_id=data["project_id"],
+            company_id=data["company_id"],
+            adjustment_type=AdjustmentType(data["adjustment_type"]),
+            amount_aud=Decimal(str(data["amount_aud"])),
+            adjustment_date=data["adjustment_date"],
+            created_by=data["created_by"],
+            created_at=data["created_at"],
+            notes=data.get("notes"),
+        )
+
+
+@dataclass
+class FinancialSummary:
+    """Computed financial summary for a project.
+
+    All amounts in AUD. Derived from approved time entries only.
+    """
+
+    project_id: str
+    project_name: str
+    company_id: str
+    original_budget_aud: Decimal
+    current_budget_aud: Decimal
+    approved_labour_cost_aud: Decimal
+    remaining_budget_aud: Decimal
+    budget_utilization_percent: float
+    budget_variance_aud: Decimal  # positive = over budget
+    is_over_budget: bool
+    approved_hours: float
+    billing_value_aud: Decimal  # approved hours * billing rates
+    gross_margin_aud: Decimal  # billing value - labour cost
+    last_updated: str  # ISO-8601 UTC
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "project_id": self.project_id,
+            "project_name": self.project_name,
+            "company_id": self.company_id,
+            "original_budget_aud": str(self.original_budget_aud),
+            "current_budget_aud": str(self.current_budget_aud),
+            "approved_labour_cost_aud": str(self.approved_labour_cost_aud),
+            "remaining_budget_aud": str(self.remaining_budget_aud),
+            "budget_utilization_percent": self.budget_utilization_percent,
+            "budget_variance_aud": str(self.budget_variance_aud),
+            "is_over_budget": self.is_over_budget,
+            "approved_hours": self.approved_hours,
+            "billing_value_aud": str(self.billing_value_aud),
+            "gross_margin_aud": str(self.gross_margin_aud),
+            "last_updated": self.last_updated,
         }
