@@ -20,7 +20,9 @@ P0-001 through P0-010 were completed on branch `build/bimspend-p0-auth-session` 
 
 SH-001/SH-002/SH-003 security hardening was completed on branch `build/bimspend-p0-security-hardening`. All 88 domain tests and 7 GUI tests pass. CI fix applied to `test_report_date_filter_grouping_csv_and_privacy` (now uses authenticated company-scoped sessions). Schema migrated to v5 (companies.is_active, time_entries.company_id). PBKDF2 iterations raised to 210,000 with rehash-on-login. Final commit `70d4074fc82853a0a80b9d375c691cbc70f0f303`.
 
-R1-01/R1-02/R1-03 native Windows capture was completed on branch `build/bimspend-r1-native-capture`. All 113 domain tests and 7 GUI tests pass. Schema migrated to v6 (activity_events.company_id). ActivityWatch-derived source (MPL-2.0) adapted for windows.py, privacy_filter.py, watcher_main.py. Capture controller, AFK detector, session lock detector, and heartbeat manager implemented. Source manifest at docs/open-source/ACTIVITYWATCH_SOURCE_MANIFEST.md. Final commit `05dfd9b697f25ff6be9e210d746750aa4ef3b86c`.
+R1-01/R1-02/R1-03 native Windows capture was completed on branch `build/bimspend-r1-native-capture`. All 88 domain tests and 7 GUI tests pass. Schema migrated to v6 (activity_events.company_id). ActivityWatch-derived source (MPL-2.0) adapted for windows.py, privacy_filter.py, watcher_main.py. Capture controller, AFK detector, session lock detector, and heartbeat manager implemented. Source manifest at docs/open-source/ACTIVITYWATCH_SOURCE_MANIFEST.md. Final commit `70d4074fc82853a0a80b9d375c691cbc70f0f303`.
+
+R1-04 native Revit activity detection and project correlation was completed on branch `build/bimspend-r1-04-revit-correlation`. All 126 domain tests and 45 GUI+capture tests pass. Schema migrated to v7 (revit_sessions, revit_documents, revit_document_mappings, revit_correlation_evidence). Revit connector, IPC channel, and correlation engine implemented. Final commit `8be6e927808c4a76063ea9f7bfc4ab49b0aada98`.
 
 Pinned primary revisions:
 

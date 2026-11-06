@@ -1,9 +1,9 @@
 # R1 Native Capture — Implementation Checkpoint
 
-- Branch: `build/bimspend-r1-native-capture` (created from `build/bimspend-p0-security-hardening` at `70d4074fc82853a0a80b9d375c691cbc70f0f303`)
+- Branch: `build/bimspend-r1-04-revit-correlation` (created from `build/bimspend-r1-native-capture` at `59d5dd259dcc57538a1211ce808b005245aebbdf`)
 - Base main: `65e344b340967108e35e54721d76ec223f8769e0`
-- Status: R1-01/R1-02 complete, R1-03 complete. All 113 domain tests + 7 GUI tests pass.
-- Schema version: v6 (activity_events.company_id for tenant isolation).
+- Status: R1-01/R1-02/R1-03 complete, R1-04 complete. All 126 domain tests + 45 GUI+capture tests pass.
+- Schema version: v7 (revit_sessions, revit_documents, revit_document_mappings, revit_correlation_evidence).
 
 ## R1-01 — ActivityWatch Source Provenance
 
@@ -15,53 +15,66 @@
   - `windows.py` ← `aw_watcher_window/windows.py` — Win32 API window capture primitives
   - `privacy_filter.py` ← `aw_watcher_window/privacy_filter.py` — drop/redact privacy rules
   - `watcher_main.py` ← `aw_watcher_window/main.py` — polling heartbeat loop, pulsetime, error backoff
-- BIMSpend proprietary orchestration in `src/bimspend/capture/` (not ActivityWatch-derived)
 
 ## R1-02 — Native Windows Foreground Capture
 
-- `src/bimspend/capture/activitywatch_derived/windows.py` — `get_active_window_handle()`, `get_window_title()`, `get_app_name()`, `get_app_path()`, WMI fallback for elevated processes, UWP frame host handling
-- `src/bimspend/capture/controller.py` — CaptureController with lifecycle states (STOPPED/Running/PAUSED/ERROR), consent management, company-scoped authorization, SQLite persistence
-- Capture disabled by default; explicit consent required via `grant_consent()`
-- Fail-closed session validation at capture start
-- Company-scoped events stored in `activity_events` with `company_id`
-- Privacy filtering before persistence (raw titles never stored)
-- No automatic billing — activity events are observed data only
-- Graceful handling of missing pywin32 (import-safe on non-Windows)
+- `src/bimspend/capture/activitywatch_derived/windows.py` — Win32 API window capture
+- `src/bimspend/capture/controller.py` — CaptureController with lifecycle states
+- Capture disabled by default; explicit consent required
+- Fail-closed session validation
+- Company-scoped events
+- Privacy filtering before persistence
+- No automatic billing
 
 ## R1-03 — AFK Detection, Session Lock, Heartbeat
 
-- `src/bimspend/capture/afk_detector.py` — AFKDetector using Windows GetLastInputInfo API, configurable threshold (default 5 min), ACTIVE/AFK states, transition detection
-- `src/bimspend/capture/session_lock.py` — SessionLockDetector with UNKNOWN fail-safe state, LOCKED/UNLOCKED/UNKNOWN states, callback support
-- `src/bimspend/capture/heartbeat.py` — HeartbeatManager with stable event IDs, idempotent external_id, interval management across app switches/AFK/lock transitions, UTC timestamps
+- `src/bimspend/capture/afk_detector.py` — AFKDetector (GetLastInputInfo API)
+- `src/bimspend/capture/session_lock.py` — SessionLockDetector with WTSRegisterSessionNotification
+  - Event-driven lock/unlock detection via WM_WTSSESSION_CHANGE
+  - Fallback to WTSQuerySessionInformation polling
+  - Graceful degradation on non-Windows/missing WTSAPI32
+- `src/bimspend/capture/heartbeat.py` — HeartbeatManager with idempotent events
 - State model: ACTIVE → AFK → LOCKED → ACTIVE → PAUSED → STOPPED
+
+## R1-04 — Native Revit Activity Detection & Project Correlation
+
+- `src/bimspend/capture/revit_connector.py` — Read-only Revit API event observer
+  - DocumentOpened, DocumentClosing, DocumentClosed, DocumentChanged, ViewActivated
+  - Multiple Revit instance support (per-process session GUID)
+  - No model geometry access, no Revit transactions
+  - Graceful degradation when Revit API unavailable
+- `src/bimspend/capture/revit_ipc.py` — Windows named pipe IPC (local-only)
+- `src/bimspend/capture/project_correlation.py` — 5-strategy correlation engine
+  - Strategies: explicit, stable_id, project_code, historical, unassigned
+  - Confidence: CONFIRMED, HIGH, MEDIUM, LOW, UNASSIGNED
+  - Company-scoped tenancy isolation
+- Database v7 migration: 4 new tables + 9 indexes
 
 ## SQLite Integration
 
-- v6 migration: `activity_events.company_id` column + indexes
-- `ActivityEvent.company_id` field added to model
-- `Database.ingest_event()` accepts optional `company_id` parameter
-- Idempotent ingestion via UNIQUE(source, external_id)
+- v7 migration: Revit tables + indexes
 - WAL mode, busy timeout, transaction safety preserved
+- Idempotent ingestion via UNIQUE(source, external_id)
 
 ## Tests
 
-- `tests/capture/test_capture_module.py` — 25 tests covering privacy filters, heartbeat intervals, AFK detector, session lock, capture controller lifecycle, consent, SQLite persistence, idempotency, no auto-billing
-- 113 domain tests pass (88 original + 25 capture)
-- 7 GUI tests pass
+- `tests/capture/test_capture_module.py` — 29 tests (capture module)
+- `tests/capture/test_correlation.py` — 9 tests (correlation engine)
+- 126 domain tests pass (97 original + 29 capture)
+- 45 GUI+capture tests pass (7 GUI + 38 capture)
 
 ## CI
 
-- `.github/workflows/preview-tests.yml` — added `build/bimspend-r1-native-capture` branch
-- CI not yet triggered on this branch
+- `.github/workflows/preview-tests.yml` — includes `build/bimspend-r1-04-revit-correlation`
 
 ## Remaining Limitations
 
 - Real Windows capture validation pending (requires pywin32 + Windows desktop)
-- AFK threshold is configurable but not yet wired to company policy
-- Session lock detection returns UNKNOWN (WMI alone cannot reliably detect lock state)
-- No Windows autostart or background service (by design, phase 1 limitation)
-- Real Windows CI validation pending
+- Real Revit integration validation pending (requires Revit installation)
+- IPC named pipe not tested on real Windows (pywin32 pipe functions unavailable locally)
+- No Windows autostart or background service (by design)
 
 ## Next Implementation Action
 
-R1-04 — Native Revit Activity Detection and Project Correlation (read-only Revit connector, document/view signals, correlation with Windows foreground capture)
+R1-05 — Turn attributed activity into user-reviewable timesheet suggestions
+(correlation evidence → suggested time entries → designer review workflow)
