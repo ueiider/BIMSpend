@@ -1,44 +1,91 @@
-"""Local synthetic team roster and project assignments."""
+"""Employees and Teams screen - BIMSpend R1-08.
+
+Local synthetic team roster and project assignments.
+Uses the BIMSpend design system.
+"""
+
 from __future__ import annotations
 
 import uuid
 from tkinter import simpledialog, messagebox, ttk
+from typing import Any
+
+from bimspend.app.design import (
+    APP_BG,
+    CARD_BG,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 from bimspend.app.screens.base import BaseScreen
+from bimspend.app.shell import BIMSpendApp
 from bimspend.models import TeamMember
 
 
 class TeamScreen(BaseScreen):
+    """Team roster and project assignments."""
+
+    def __init__(self, parent: ttk.Widget, app: BIMSpendApp):
+        super().__init__(parent, app)
+
     def on_show(self) -> None:
         for widget in self.winfo_children():
             widget.destroy()
-        self._section_header("Team", "Synthetic roster, roles, rates and assignments")
-        self.tree = ttk.Treeview(
-            self, columns=("id", "role", "cost", "status", "projects"),
-            show="headings", height=13,
+        self._section_header(
+            "Employees and Teams",
+            "Synthetic roster, roles, rates and assignments",
         )
-        for col, label in (("id", "ID"), ("role", "Role"),
-                           ("cost", "Internal A$/h"), ("status", "Status"),
-                           ("projects", "Project IDs")):
+        self._build_table()
+        self._build_buttons()
+        self._refresh()
+
+    def _build_table(self) -> None:
+        self.tree = ttk.Treeview(
+            self,
+            columns=("id", "role", "cost", "status", "projects"),
+            show="headings",
+            height=13,
+            style="App.Treeview",
+        )
+        for col, label in (
+            ("id", "ID"),
+            ("role", "Role"),
+            ("cost", "Internal A$/h"),
+            ("status", "Status"),
+            ("projects", "Project IDs"),
+        ):
             self.tree.heading(col, text=label)
             self.tree.column(col, width=125 if col != "projects" else 200)
         self.tree.pack(fill="both", expand=True)
+
+    def _build_buttons(self) -> None:
         buttons = ttk.Frame(self, style="App.TFrame")
         buttons.pack(fill="x", pady=10)
-        for label, callback in (("Add member", self._add), ("Edit member", self._edit),
-                                ("Deactivate", self._deactivate),
-                                ("Assign project", self._assign)):
-            ttk.Button(buttons, text=label, command=callback).pack(side="left", padx=4)
-        self._refresh()
+        for label, callback in (
+            ("Add member", self._add),
+            ("Edit member", self._edit),
+            ("Deactivate", self._deactivate),
+            ("Assign project", self._assign),
+        ):
+            ttk.Button(buttons, text=label, command=callback).pack(
+                side="left", padx=4
+            )
 
     def _refresh(self) -> None:
         for item in self.tree.get_children():
             self.tree.delete(item)
         for member in self.db.list_members():
-            self.tree.insert("", "end", text=member.name,
-                             values=(member.id, member.role,
-                                     f"{member.loaded_cost_rate:.2f}",
-                                     "Active" if member.is_active else "Inactive",
-                                     ", ".join(self.db.list_assignments(member.id))))
+            self.tree.insert(
+                "",
+                "end",
+                text=member.name,
+                values=(
+                    member.id,
+                    member.role,
+                    f"{member.loaded_cost_rate:.2f}",
+                    "Active" if member.is_active else "Inactive",
+                    ", ".join(self.db.list_assignments(member.id)),
+                ),
+            )
 
     def _selected(self) -> TeamMember | None:
         selected = self.tree.selection()
@@ -49,24 +96,34 @@ class TeamScreen(BaseScreen):
         return next((m for m in self.db.list_members() if m.id == member_id), None)
 
     def _fields(self, member: TeamMember | None = None) -> None:
-        name = simpledialog.askstring("Team", "Member name:",
-                                      initialvalue=member.name if member else "")
+        name = simpledialog.askstring(
+            "Team", "Member name:",
+            initialvalue=member.name if member else "",
+        )
         if name is None:
             return
-        role = simpledialog.askstring("Team", "Role (designer or manager):",
-                                      initialvalue=member.role if member else "designer")
+        role = simpledialog.askstring(
+            "Team", "Role (designer or manager):",
+            initialvalue=member.role if member else "designer",
+        )
         if role is None:
             return
-        cost = simpledialog.askfloat("Team", "Loaded internal hourly cost (A$):",
-                                     initialvalue=member.loaded_cost_rate if member else 85)
+        cost = simpledialog.askfloat(
+            "Team", "Loaded internal hourly cost (A$):",
+            initialvalue=member.loaded_cost_rate if member else 85,
+        )
         if cost is None:
             return
         try:
-            self.db.upsert_member(TeamMember(
-                member.id if member else f"member_{uuid.uuid4().hex}",
-                name.strip(), role.strip().lower(), cost,
-                member.is_active if member else True,
-            ))
+            self.db.upsert_member(
+                TeamMember(
+                    member.id if member else f"member_{uuid.uuid4().hex}",
+                    name.strip(),
+                    role.strip().lower(),
+                    cost,
+                    member.is_active if member else True,
+                )
+            )
             self._refresh()
         except ValueError as exc:
             messagebox.showerror("Team error", str(exc))
@@ -81,7 +138,9 @@ class TeamScreen(BaseScreen):
 
     def _deactivate(self) -> None:
         member = self._selected()
-        if member and messagebox.askyesno("Team", f"Deactivate {member.name}?"):
+        if member and messagebox.askyesno(
+            "Team", f"Deactivate {member.name}?"
+        ):
             member.is_active = False
             self.db.upsert_member(member)
             self._refresh()
@@ -90,10 +149,14 @@ class TeamScreen(BaseScreen):
         member = self._selected()
         if not member:
             return
-        choices = "\n".join(f"{p.id}: {p.name}" for p in self.db.list_projects()
-                            if not p.is_archived)
-        project_id = simpledialog.askstring("Assign project",
-                                            f"Project ID:\n{choices}")
+        choices = "\n".join(
+            f"{p.id}: {p.name}"
+            for p in self.db.list_projects()
+            if not p.is_archived
+        )
+        project_id = simpledialog.askstring(
+            "Assign project", f"Project ID:\n{choices}"
+        )
         if project_id is None:
             return
         try:

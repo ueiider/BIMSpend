@@ -123,11 +123,23 @@ class OverviewScreen(BaseScreen):
         frame.pack(fill="x", pady=(0, 24))
 
         for i, (label, value, sublabel, color) in enumerate(cards):
-            card = self._metric_card(
-                frame, label, value, sublabel, color=color
-            )
+            card = ttk.Frame(frame, style="Card.TFrame")
             card.grid(row=0, column=i, padx=4, pady=4, sticky="ew")
             frame.columnconfigure(i, weight=1)
+
+            inner = ttk.Frame(card, style="Card.TFrame")
+            inner.pack(fill="both", expand=True, padx=16, pady=12)
+
+            ttk.Label(
+                inner, text=label, style="MetricLabel.TLabel"
+            ).pack(anchor="w")
+            ttk.Label(
+                inner, text=value, style="MetricValue.TLabel",
+                foreground=color
+            ).pack(anchor="w", pady=(2, 0))
+            ttk.Label(
+                inner, text=sublabel, style="MetricLabel.TLabel"
+            ).pack(anchor="w")
 
     # ------------------------------------------------------------------
     # Projects table
