@@ -13,6 +13,7 @@ from typing import Any
 
 from bimspend.app.screens.base import BaseScreen
 from bimspend.app.shell import BIMSpendApp
+from bimspend.identity import current_auth
 from bimspend.models import TimeEntry, TimeEntryState
 from bimspend.review import submit_entry, approve_entry, reject_entry
 
@@ -22,7 +23,7 @@ class TimesheetReviewScreen(BaseScreen):
 
     def __init__(self, parent: ttk.Widget, app: BIMSpendApp):
         super().__init__(parent, app)
-        self.current_user = "designer_01"  # synthetic designer; not authenticated
+        # No hardcoded user — uses current_auth session (fail-closed)
 
     def on_show(self) -> None:
         for widget in self.winfo_children():
@@ -39,8 +40,14 @@ class TimesheetReviewScreen(BaseScreen):
         action_frame = ttk.Frame(self, style="App.TFrame")
         action_frame.pack(fill="x", pady=(0, 12))
 
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Error", "No authenticated session.")
+            return
+
         ttk.Label(
-            action_frame, text="Current user: " + self.current_user, style="MetricLabel.TLabel"
+            action_frame, text="Current user: " + actor.id, style="MetricLabel.TLabel"
         ).pack(side="left", padx=(0, 16))
 
         ttk.Button(
@@ -197,6 +204,12 @@ class TimesheetReviewScreen(BaseScreen):
 
     def _submit_selected(self) -> None:
         """Designer submits selected pending entry."""
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Submit Error", "No authenticated session.")
+            return
+
         selection = self.pending_tree.selection()
         if not selection:
             from tkinter import messagebox
@@ -209,8 +222,8 @@ class TimesheetReviewScreen(BaseScreen):
             return
 
         try:
-            submit_entry(entry, submitted_by=self.current_user)
-            self.app.db.upsert_time_entry(entry, actor_id=self.current_user)
+            submit_entry(entry, submitted_by=actor.id)
+            self.app.db.upsert_time_entry(entry, actor_id=actor.id)
             self._refresh()
         except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
@@ -218,6 +231,12 @@ class TimesheetReviewScreen(BaseScreen):
 
     def _reset_selected(self) -> None:
         """Reset rejected entry to pending."""
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Reset Error", "No authenticated session.")
+            return
+
         selection = self.pending_tree.selection()
         if not selection:
             return
@@ -230,8 +249,8 @@ class TimesheetReviewScreen(BaseScreen):
         from bimspend.review import reset_to_pending
 
         try:
-            reset_to_pending(entry, self.current_user)
-            self.app.db.upsert_time_entry(entry, actor_id=self.current_user)
+            reset_to_pending(entry, actor.id)
+            self.app.db.upsert_time_entry(entry, actor_id=actor.id)
             self._refresh()
         except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
@@ -239,6 +258,12 @@ class TimesheetReviewScreen(BaseScreen):
 
     def _approve_selected(self) -> None:
         """Manager approves submitted entry."""
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Approve Error", "No authenticated session.")
+            return
+
         selection = self.submitted_tree.selection()
         if not selection:
             from tkinter import messagebox
@@ -251,8 +276,8 @@ class TimesheetReviewScreen(BaseScreen):
             return
 
         try:
-            approve_entry(entry, reviewed_by="manager_demo")
-            self.app.db.upsert_time_entry(entry, actor_id="manager_demo")
+            approve_entry(entry, reviewed_by=actor.id)
+            self.app.db.upsert_time_entry(entry, actor_id=actor.id)
             self._refresh()
         except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
@@ -260,6 +285,12 @@ class TimesheetReviewScreen(BaseScreen):
 
     def _reject_selected(self) -> None:
         """Manager rejects submitted entry."""
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Reject Error", "No authenticated session.")
+            return
+
         selection = self.submitted_tree.selection()
         if not selection:
             from tkinter import messagebox
@@ -278,8 +309,8 @@ class TimesheetReviewScreen(BaseScreen):
             return
 
         try:
-            reject_entry(entry, reviewed_by="manager_demo", notes=reason)
-            self.app.db.upsert_time_entry(entry, actor_id="manager_demo")
+            reject_entry(entry, reviewed_by=actor.id, notes=reason)
+            self.app.db.upsert_time_entry(entry, actor_id=actor.id)
             self._refresh()
         except (ValueError, PermissionError) as exc:
             from tkinter import messagebox
@@ -287,6 +318,12 @@ class TimesheetReviewScreen(BaseScreen):
 
 
     def _edit_selected(self) -> None:
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Edit Error", "No authenticated session.")
+            return
+
         from tkinter import simpledialog, messagebox
         selected = self.pending_tree.selection()
         if not selected:
@@ -301,13 +338,19 @@ class TimesheetReviewScreen(BaseScreen):
             return
         from bimspend.review import edit_entry
         try:
-            edit_entry(entry, minutes, self.current_user)
-            self.db.upsert_time_entry(entry, actor_id=self.current_user)
+            edit_entry(entry, minutes, actor.id)
+            self.db.upsert_time_entry(entry, actor_id=actor.id)
             self._refresh()
         except (ValueError, PermissionError) as exc:
             messagebox.showerror("Edit Error", str(exc))
 
     def _bill_selected(self) -> None:
+        actor = current_auth.actor
+        if actor is None:
+            from tkinter import messagebox
+            messagebox.showerror("Billing Error", "No authenticated session.")
+            return
+
         from tkinter import simpledialog, messagebox
         selected = self.approved_tree.selection()
         if not selected:
@@ -322,8 +365,8 @@ class TimesheetReviewScreen(BaseScreen):
             return
         from bimspend.review import bill_entry
         try:
-            bill_entry(entry, minutes, reviewed_by="manager_demo")
-            self.db.upsert_time_entry(entry, actor_id="manager_demo")
+            bill_entry(entry, minutes, reviewed_by=actor.id)
+            self.db.upsert_time_entry(entry, actor_id=actor.id)
             self._refresh()
         except (ValueError, PermissionError) as exc:
             messagebox.showerror("Billing Error", str(exc))
