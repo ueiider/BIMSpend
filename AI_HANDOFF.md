@@ -16,6 +16,8 @@ Mode: **BUILD 01 AUTHORIZED (2026-11-05).** Owner approved initial vertical-slic
 
 P1-01 through P1-07 were completed as a static/research audit. The full evidence, reuse matrix, risk register, architecture, acceptance criteria and effort ranges are in `PLAN_AUDIT_REPORT.md`.
 
+P0-001 through P0-010 were completed on branch `build/bimspend-p0-auth-session` at commit `3e61aaf1f24fb692718e514010f0aee36a6ff69e`. All 62 domain tests pass.
+
 Pinned primary revisions:
 
 - Miru: `10e457e1d0cd2ac782be9d1edbcbd5a1a573486a` (`develop`)
