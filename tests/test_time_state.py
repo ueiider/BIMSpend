@@ -32,7 +32,8 @@ from bimspend.review import (  # noqa: E402
 
 
 def _set_actor(user_id: str, role: Role, company_id: str | None = None):
-    current_auth.set_actor(Actor(id=user_id, role=role, company_id=company_id))
+    current_auth.clear()
+    current_auth.set_actor(Actor(id=user_id, role=role, company_id=company_id or "c1"))
 
 
 _SCRATCH_DB = "test_bimspend_scratch.db"

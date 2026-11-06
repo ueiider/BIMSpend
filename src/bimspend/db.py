@@ -14,6 +14,9 @@ Schema versions:
       historical user_ids from time_entries to team_members.
   v4: Authentication and authorization — added companies, company_members,
       user_credentials, and sessions tables for session-based auth.
+  v5: Security hardening — added is_active to companies for company-level
+      deactivation, and company_id to time_entries for cross-company
+      access enforcement at the record level.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ import sqlite3
 import time
 from contextlib import contextmanager
 from functools import wraps
-from datetime import datetime, timezone, timedelta, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from .models import (
@@ -76,9 +79,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 4:
+            if version is not None and version > 5:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 4")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 5")
         self._create_tables()
         self._migrate()
 
@@ -129,7 +132,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS team_members (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                role TEXT NOT NULL CHECK(role IN ('designer', 'manager')),
+                role TEXT NOT NULL CHECK(role IN ('designer', 'manager', 'administrator')),
                 loaded_cost_rate REAL NOT NULL CHECK(loaded_cost_rate >= 0),
                 is_active INTEGER NOT NULL DEFAULT 1
             );
@@ -363,6 +366,22 @@ class Database:
                     "CREATE INDEX IF NOT EXISTS ix_sessions_company ON sessions(company_id)"
                 )
                 self.conn.execute("INSERT INTO schema_version(version,applied_at) VALUES (4,?)", (_now_iso(),))
+        # v5 migration: security hardening — company is_active flag and
+        # company_id on time_entries for cross-company access enforcement
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 5").fetchone():
+            with self.transaction():
+                cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(companies)")}
+                if "is_active" not in cols:
+                    self.conn.execute(
+                        "ALTER TABLE companies ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+                    )
+                cols = {row["name"] for row in self.conn.execute("PRAGMA table_info(time_entries)")}
+                if "company_id" not in cols:
+                    self.conn.execute(
+                        "ALTER TABLE time_entries ADD COLUMN company_id TEXT REFERENCES companies(id)"
+                    )
+                self.conn.execute(
+                    "INSERT INTO schema_version(version,applied_at) VALUES (5,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -433,7 +452,7 @@ class Database:
     def upsert_member(self, member: TeamMember) -> None:
         if not member.id.strip() or not member.name.strip():
             raise ValueError("Member ID and name are required.")
-        if member.role not in ("designer", "manager") or member.loaded_cost_rate < 0:
+        if member.role not in ("designer", "manager", "administrator") or member.loaded_cost_rate < 0:
             raise ValueError("Invalid role or hourly cost.")
         self.conn.execute(
             """INSERT INTO team_members (id, name, role, loaded_cost_rate, is_active)
@@ -601,8 +620,9 @@ class Database:
                 (id, attributed_time_id, project_id, user_id, minutes, state,
                  standard_rate, loaded_cost_rate, billed_minutes,
                  review_notes, reviewed_by, reviewed_at,
-                 submitted_by, submitted_at, created_at, is_archived)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 submitted_by, submitted_at, created_at, is_archived,
+                 company_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 attributed_time_id=excluded.attributed_time_id,
                 project_id=excluded.project_id,
@@ -618,7 +638,8 @@ class Database:
                 submitted_by=excluded.submitted_by,
                 submitted_at=excluded.submitted_at,
                 created_at=excluded.created_at,
-                is_archived=excluded.is_archived
+                is_archived=excluded.is_archived,
+                company_id=excluded.company_id
             """,
             (
                 entry.id,
@@ -637,6 +658,7 @@ class Database:
                 entry.submitted_at,
                 entry.created_at or _now_iso(),
                 int(entry.is_archived),
+                entry.company_id,
             ),
         )
         if previous is None or (previous.state != entry.state or
@@ -688,15 +710,17 @@ class Database:
     # ------------------------------------------------------------------
     # Authentication and session management
     # ------------------------------------------------------------------
-    def upsert_company(self, company_id: str, name: str) -> None:
+    def upsert_company(self, company_id: str, name: str, is_active: bool = True) -> None:
         """Create or update a company."""
         self.conn.execute(
             """
-            INSERT INTO companies (id, name, created_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET name=excluded.name
+            INSERT INTO companies (id, name, created_at, is_active)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                is_active=excluded.is_active
             """,
-            (company_id, name, _now_iso()),
+            (company_id, name, _now_iso(), int(is_active)),
         )
         self._commit()
 
@@ -832,12 +856,16 @@ class Database:
         return session_id
 
     def validate_session(self, session_id: str) -> dict[str, Any] | None:
-        """Validate a session and return member/company info if valid."""
+        """Validate a session and return member/company info if valid.
+
+        Fail-closed: returns None if the session is expired, revoked,
+        the member is inactive, or the company is inactive.
+        """
         row = self.conn.execute(
             """
             SELECT s.id, s.member_id, s.company_id, s.expires_at, s.created_at,
                    s.revoked_at, tm.name, tm.role, tm.is_active as member_active,
-                   c.name as company_name
+                   c.name as company_name, c.is_active as company_active
             FROM sessions s
             JOIN team_members tm ON tm.id = s.member_id
             JOIN companies c ON c.id = s.company_id
@@ -850,6 +878,8 @@ class Database:
         if row["revoked_at"] is not None:
             return None
         if row["member_active"] == 0:
+            return None
+        if row["company_active"] == 0:
             return None
         expires_at = datetime.fromisoformat(row["expires_at"])
         if expires_at < datetime.now(timezone.utc):
@@ -1027,6 +1057,7 @@ class Database:
             submitted_at=row["submitted_at"],
             created_at=row["created_at"],
             is_archived=bool(row["is_archived"]),
+            company_id=row["company_id"],
         )
 
     def close(self) -> None:

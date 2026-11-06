@@ -201,6 +201,7 @@ class TimeEntry:
     submitted_at: Optional[str] = None  # when designer submitted
     created_at: Optional[str] = None
     is_archived: bool = False
+    company_id: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -220,6 +221,7 @@ class TimeEntry:
             "submitted_at": self.submitted_at,
             "created_at": self.created_at,
             "is_archived": self.is_archived,
+            "company_id": self.company_id,
         }
 
     @classmethod

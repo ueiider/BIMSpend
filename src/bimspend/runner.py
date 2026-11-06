@@ -17,10 +17,12 @@ from typing import Any
 
 from .adapters.activitywatch import ActivityWatchAdapter
 from .adapters.miru import MiruProjectAdapter
+from .auth import SessionManager, hash_password
 from .correlation import correlate_events
 from .db import Database
 from .dashboard import all_projects_summary
-from .models import AttributedTime, Project, TimeEntry, TimeEntryState
+from .identity import Role, current_auth
+from .models import AttributedTime, Project, TeamMember, TimeEntry, TimeEntryState
 from .review import approve_entry, bill_entry, reject_entry, submit_entry, suggest_entry
 
 
@@ -37,6 +39,22 @@ def _fixture(name: str) -> str:
 
 def run() -> None:
     db = Database("bimspend_demo.db")
+
+    # --- Authentication setup (SH-001/SH-002) ---
+    # Create company and members for the demo
+    db.upsert_company("demo-co", "Demo Company", is_active=True)
+    db.upsert_member(TeamMember("designer_01", "Demo Designer", "designer", 95.0, True))
+    db.upsert_member(TeamMember("manager_01", "Demo Manager", "manager", 120.0, True))
+    db.upsert_company_member("demo-co", "designer_01", "designer")
+    db.upsert_company_member("demo-co", "manager_01", "manager")
+    db.upsert_user_credential("designer_01", "designer_01", hash_password("demo"))
+    db.upsert_user_credential("manager_01", "manager_01", hash_password("demo"))
+
+    # Log in as designer for submission
+    sm = SessionManager(db)
+    designer = sm.login("designer_01", "demo", company_id="demo-co")
+    assert designer.role == Role.DESIGNER
+    assert designer.company_id == "demo-co"
 
     # 1. Project identity (Miru-like adapter)
     projects_adapter = MiruProjectAdapter(_fixture("projects.json"))
@@ -105,19 +123,26 @@ def run() -> None:
     for i, entry in enumerate(fresh_entries):
         if i == 0:
             # Designer submits
-            submit_entry(entry, submitted_by=demo_user)
+            submit_entry(entry)
             db.upsert_time_entry(entry)
             # Manager approves
-            approve_entry(entry, reviewed_by="manager_01")
+            sm.logout()
+            manager = sm.login("manager_01", "demo", company_id="demo-co")
+            assert manager.role == Role.MANAGER
+            approve_entry(entry)
             db.upsert_time_entry(entry)
             # Billing: invoice 80% of approved hours (realization gap)
-            bill_entry(entry, billed_minutes=entry.minutes * 0.8, reviewed_by="manager_01")
+            bill_entry(entry, billed_minutes=entry.minutes * 0.8)
             db.upsert_time_entry(entry)
         elif i == 1:
             # Designer submits, manager rejects
-            submit_entry(entry, submitted_by=demo_user)
+            sm.logout()
+            designer = sm.login("designer_01", "demo", company_id="demo-co")
+            submit_entry(entry)
             db.upsert_time_entry(entry)
-            reject_entry(entry, reviewed_by="manager_01", notes="Wrong project attribution")
+            sm.logout()
+            manager = sm.login("manager_01", "demo", company_id="demo-co")
+            reject_entry(entry, notes="Wrong project attribution")
             db.upsert_time_entry(entry)
         # i >= 2 remain pending_review (designer hasn't reviewed yet)
         db.upsert_time_entry(entry)

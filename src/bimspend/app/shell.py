@@ -330,13 +330,14 @@ class BIMSpendApp:
             "Settings panel\n\nLocal synthetic data mode.\nNo employee monitoring active.\nNo remote synchronization.",
         )
 
-    def login(self, username: str, password: str) -> None:
+    def login(self, username: str, password: str, company_id: str | None = None) -> None:
         """Authenticate the user and set the current session.
 
-        Raises ValueError if credentials are invalid.
+        Raises ValueError if credentials are invalid or company selection
+        is required but not provided.
         """
         sm = SessionManager(self.db)
-        actor = sm.login(username, password)
+        actor = sm.login(username, password, company_id=company_id)
         self.current_user = actor.id
 
     def logout(self) -> None:

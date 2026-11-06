@@ -16,7 +16,8 @@ Build status: **AUTHORIZED — owner approved 2026-11-05; B2-A audit deferred, n
 | P1-06 | Threat/privacy/legal risk register and acceptance criteria | DONE (planning) | PLAN_AUDIT_REPORT.md §8; legal compliance NÃO VALIDADO |
 | P1-07 | Produce staged implementation proposal and explicit approval gate | DONE | PLAN_AUDIT_REPORT.md §§9–10 |
 | B2-01 | Run isolated reproducible baseline builds/tests | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; B2-A audit deferred; baseline validation documented in build branch |
-| P0-009/P0-010 | Authentication, session, and authorization foundation | DONE | Branch build/bimspend-p0-auth-session at 3e61aaf1f24fb692718e514010f0aee36a6ff69e; 62 tests passed including password hashing (pbkdf2_sha256), login/logout, session expiration, RBAC, cross-tenant denial, historical ID migration v1→v4, approved/billed preservation, lock exhaustion, rollback, concurrent writes, GUI startup without external adapters |
+| P0-009/P0-010 | Authentication, session, and authorization foundation | DONE | Branch build/bimspend-p0-auth-session at 3e61aaf1f24fb692718e514010f0aee36a6ff69e; 62 tests passed |
+| SH-001/SH-002/SH-003 | Security hardening: session validation, company-scoped authorization, password storage | DONE | Branch build/bimspend-p0-security-hardening; 88 domain tests + 3 GUI tests passed; schema v5; pbkdf2 210k iterations |
 | B3-01 | Prototype end-to-end event -> project -> manager report | AUTHORIZED — BUILD 01 | Owner approved 2026-11-05; vertical slice implemented in build branch |
 
 ## Audit conclusion

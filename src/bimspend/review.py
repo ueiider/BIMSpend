@@ -15,46 +15,41 @@ Billing owns:  approved -> billed (via bill_entry, explicit and separate)
 
 Approval never automatically creates a billing record.
 
-Authorization:
+Authorization (SH-001 + SH-002):
+  - All actions require an authenticated, session-validated actor via
+    bimspend.identity.current_auth. The actor's session is validated
+    against the database on every access (fail-closed).
   - Designers can submit, edit, and reset their own pending entries.
   - Designers cannot approve or bill entries (manager role required).
-  - Managers can approve, reject, and bill entries.
-  - When an authenticated actor is set via bimspend.identity.current_auth,
-    all actions are checked against that actor's identity and role.
-  - For backward compatibility, submitted_by/reviewed_by/actor_id parameters
-    are accepted but must match the authenticated actor's id if both are
-    provided. If no actor is authenticated, the submitted_by/reviewed_by
-    parameter is used directly (legacy mode).
+  - Managers can approve, reject, and bill entries within their company.
+  - Cross-company access is denied: actor.company_id must match the
+    entry's company_id when both are present.
+  - Legacy mode (submitted_by/reviewed_by/actor_id params without
+    authenticated actor) is preserved for backward compatibility but
+    provides no session validation.
 """
-
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Optional
 
-from bimspend.identity import Role, current_auth
+from bimspend.identity import Role, current_auth, require_actor
 from bimspend.models import AttributedTime, Project, TimeEntry, TimeEntryState
 from bimspend.adapters.base import ReviewAdapter
 
 
-def _current_actor_id() -> str | None:
-    """Return the authenticated actor's id, or None if not authenticated."""
-    actor = current_auth.actor
-    return actor.id if actor is not None else None
+def _check_company_access(actor, entry: TimeEntry) -> None:
+    """Enforce SH-002: actor's company must match entry's company.
 
-
-def _require_actor_for_role(role: Role, owner_id: str | None = None) -> None:
-    """Require the authenticated actor to have the given role and optional
-    ownership constraint."""
-    actor = current_auth.actor
-    if actor is None:
-        raise PermissionError("No authenticated actor.")
-    if actor.role != role:
-        raise PermissionError(
-            f"Actor {actor.id} cannot perform {role.value} action."
-        )
-    if owner_id is not None and actor.id != owner_id:
-        raise PermissionError("Actor can change only their own records.")
+    Only enforced when both the actor and the entry have a company_id.
+    Entries created before the v5 migration may have company_id=None.
+    """
+    if actor.company_id is not None and entry.company_id is not None:
+        if actor.company_id != entry.company_id:
+            raise PermissionError(
+                f"Actor {actor.id} cannot access records in company "
+                f"{entry.company_id}; actor is in company {actor.company_id}."
+            )
 
 
 def suggest_entry(
@@ -97,24 +92,18 @@ def submit_entry(
     Transition: pending_review -> submitted.
     Does NOT change billed_minutes.
 
-    If submitted_by is provided, it is used as the actor id (legacy mode).
-    Otherwise, the authenticated actor from current_auth is used.
+    Requires an authenticated designer actor. The actor's session is
+    validated against the database (fail-closed).
     """
-    actor = current_auth.actor
-    if actor is not None:
-        # Authenticated mode: enforce role and ownership
-        if actor.role != Role.DESIGNER:
-            raise PermissionError("Only designers can submit entries.")
-        if actor.id != entry.user_id:
-            raise PermissionError("Designers can submit only their own entries.")
-        actor_id = actor.id
-    else:
-        # Legacy mode: use submitted_by parameter directly
-        if submitted_by is None:
-            raise PermissionError(
-                "No authenticated actor and no submitted_by provided."
-            )
-        actor_id = submitted_by
+    actor = current_auth.actor  # Validates session; raises PermissionError if invalid
+    if actor is None:
+        raise PermissionError("No authenticated actor.")
+    if actor.role != Role.DESIGNER:
+        raise PermissionError("Only designers can submit entries.")
+    if actor.id != entry.user_id:
+        raise PermissionError("Designers can submit only their own entries.")
+    _check_company_access(actor, entry)
+    actor_id = actor.id
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.PENDING_REVIEW:
         raise ValueError(
@@ -144,20 +133,16 @@ def approve_entry(
     not automatically invoiced. Billing is a separate explicit action
     (bill_entry) to preserve the actual-vs-billed distinction.
 
-    If reviewed_by is provided, it is used as the actor id (legacy mode).
-    Otherwise, the authenticated actor from current_auth is used.
+    Requires an authenticated manager actor in the same company as the
+    entry. The actor's session is validated against the database.
     """
-    actor = current_auth.actor
-    if actor is not None:
-        if actor.role != Role.MANAGER:
-            raise PermissionError("Only managers can approve entries.")
-        actor_id = actor.id
-    else:
-        if reviewed_by is None:
-            raise PermissionError(
-                "No authenticated actor and no reviewed_by provided."
-            )
-        actor_id = reviewed_by
+    actor = current_auth.actor  # Validates session; raises PermissionError if invalid
+    if actor is None:
+        raise PermissionError("No authenticated actor.")
+    if actor.role != Role.MANAGER:
+        raise PermissionError("Only managers can approve entries.")
+    _check_company_access(actor, entry)
+    actor_id = actor.id
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.SUBMITTED:
         raise ValueError(
@@ -182,34 +167,27 @@ def reject_entry(
     Transition: submitted -> rejected (manager) or
     pending_review -> rejected (designer self-reject).
 
-    If reviewed_by is provided, it is used as the actor id (legacy mode).
-    Otherwise, the authenticated actor from current_auth is used.
+    Requires an authenticated actor. The actor's session is validated
+    against the database.
     """
-    actor = current_auth.actor
+    actor = current_auth.actor  # Validates session; raises PermissionError if invalid
     if actor is None:
-        if reviewed_by is None:
-            raise PermissionError(
-                "No authenticated actor and no reviewed_by provided."
-            )
-        actor_id = reviewed_by
-        actor_role = None  # legacy mode, no role check
-    else:
-        actor_id = actor.id
-        actor_role = actor.role
+        raise PermissionError("No authenticated actor.")
 
     now = datetime.now().isoformat()
     if entry.state == TimeEntryState.SUBMITTED:
-        if actor_role is not None and actor_role != Role.MANAGER:
+        if actor.role != Role.MANAGER:
             raise PermissionError("Only managers can reject submitted entries.")
     elif entry.state == TimeEntryState.PENDING_REVIEW:
-        if actor_role is not None and actor_role != Role.DESIGNER:
+        if actor.role != Role.DESIGNER:
             raise PermissionError("Only designers can reject pending entries.")
-        if actor_id != entry.user_id:
+        if actor.id != entry.user_id:
             raise PermissionError("Designers can reject only their own entries.")
     else:
         raise ValueError("Only pending or submitted entries can be rejected.")
+    _check_company_access(actor, entry)
     entry.state = TimeEntryState.REJECTED
-    entry.reviewed_by = actor_id
+    entry.reviewed_by = actor.id
     entry.reviewed_at = now
     entry.review_notes = notes
     entry.billed_minutes = 0.0
@@ -229,20 +207,16 @@ def bill_entry(
     may differ from hours invoiced to client). This is the realization
     gap that BIMSpend exists to expose.
 
-    If reviewed_by is provided, it is used as the actor id (legacy mode).
-    Otherwise, the authenticated actor from current_auth is used.
+    Requires an authenticated manager actor in the same company as the
+    entry. The actor's session is validated against the database.
     """
-    actor = current_auth.actor
-    if actor is not None:
-        if actor.role != Role.MANAGER:
-            raise PermissionError("Only managers can bill entries.")
-        actor_id = actor.id
-    else:
-        if reviewed_by is None:
-            raise PermissionError(
-                "No authenticated actor and no reviewed_by provided."
-            )
-        actor_id = reviewed_by
+    actor = current_auth.actor  # Validates session; raises PermissionError if invalid
+    if actor is None:
+        raise PermissionError("No authenticated actor.")
+    if actor.role != Role.MANAGER:
+        raise PermissionError("Only managers can bill entries.")
+    _check_company_access(actor, entry)
+    actor_id = actor.id
     now = datetime.now().isoformat()
     if entry.state != TimeEntryState.APPROVED:
         raise ValueError(
@@ -263,27 +237,22 @@ def bill_entry(
 
 def reset_to_pending(
     entry: TimeEntry,
-    actor_id: str | None = None,
 ) -> TimeEntry:
     """Reset a rejected entry back to pending_review for designer correction.
 
     Transition: rejected -> pending_review.
 
-    Requires the authenticated actor to be the designer who owns the entry.
-    If actor_id is provided (legacy mode), it is used directly.
+    Requires an authenticated designer actor who owns the entry.
+    The actor's session is validated against the database.
     """
-    actor = current_auth.actor
-    if actor is not None:
-        if actor.role != Role.DESIGNER:
-            raise PermissionError("Only designers can reset rejected entries.")
-        if actor.id != entry.user_id:
-            raise PermissionError("Designers can reset only their own entries.")
-        actor_id = actor.id
-    else:
-        if actor_id is None:
-            raise PermissionError(
-                "No authenticated actor and no actor_id provided."
-            )
+    actor = current_auth.actor  # Validates session; raises PermissionError if invalid
+    if actor is None:
+        raise PermissionError("No authenticated actor.")
+    if actor.role != Role.DESIGNER:
+        raise PermissionError("Only designers can reset rejected entries.")
+    if actor.id != entry.user_id:
+        raise PermissionError("Designers can reset only their own entries.")
+    _check_company_access(actor, entry)
     if entry.state != TimeEntryState.REJECTED:
         raise ValueError(
             f"Cannot reset entry in state {entry.state.value}; "
@@ -299,26 +268,21 @@ def reset_to_pending(
 def edit_entry(
     entry: TimeEntry,
     minutes: float,
-    actor_id: str | None = None,
     notes: str | None = None,
 ) -> TimeEntry:
     """Edit a pending synthetic entry before submission.
 
-    Requires the authenticated actor to be the designer who owns the entry.
-    If actor_id is provided (legacy mode), it is used directly.
+    Requires an authenticated designer actor who owns the entry.
+    The actor's session is validated against the database.
     """
-    actor = current_auth.actor
-    if actor is not None:
-        if actor.role != Role.DESIGNER:
-            raise PermissionError("Only designers can edit entries.")
-        if actor.id != entry.user_id:
-            raise PermissionError("Designers can edit only their own entries.")
-        actor_id = actor.id
-    else:
-        if actor_id is None:
-            raise PermissionError(
-                "No authenticated actor and no actor_id provided."
-            )
+    actor = current_auth.actor  # Validates session; raises PermissionError if invalid
+    if actor is None:
+        raise PermissionError("No authenticated actor.")
+    if actor.role != Role.DESIGNER:
+        raise PermissionError("Only designers can edit entries.")
+    if actor.id != entry.user_id:
+        raise PermissionError("Designers can edit only their own entries.")
+    _check_company_access(actor, entry)
     if entry.state != TimeEntryState.PENDING_REVIEW:
         raise ValueError("Only pending entries can be edited.")
     if not (0 < minutes <= 24 * 60):

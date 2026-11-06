@@ -17,7 +17,8 @@ FIXTURES = Path(__file__).resolve().parents[1] / "data" / "synthetic"
 
 
 def _set_actor(user_id: str, role: Role, company_id: str | None = None):
-    current_auth.set_actor(Actor(id=user_id, role=role, company_id=company_id))
+    current_auth.clear()
+    current_auth.set_actor(Actor(id=user_id, role=role, company_id=company_id or "c1"))
 
 
 def test_archive_persists_without_changing_billability_or_name(tmp_path):
@@ -266,15 +267,14 @@ def test_domain_edit_ownership_and_audit_survives_restart(tmp_path):
     entry = TimeEntry("t", "a", "p", "designer_01", 60)
     db.upsert_time_entry(entry)
     # Non-owner designer cannot edit (authenticated mode)
-    _set_actor("designer_02", Role.DESIGNER)
+    _set_actor("designer_02", Role.DESIGNER, "c1")
     with pytest.raises(PermissionError):
         edit_entry(entry, 30)
-    # Invalid minutes raises ValueError regardless of auth
-    current_auth.clear()
+    # Invalid minutes raises ValueError (with authenticated actor)
+    _set_actor("designer_01", Role.DESIGNER, "c1")
     with pytest.raises(ValueError):
-        edit_entry(entry, 0, "designer_01")
+        edit_entry(entry, 0)
     # Owner designer can edit
-    _set_actor("designer_01", Role.DESIGNER)
     edit_entry(entry, 30)
     db.upsert_time_entry(entry, actor_id="designer_01")
     submit_entry(entry)

@@ -5,6 +5,8 @@ on:
       - main
       - work/bimspend-build-integration
       - build/bimspend-p0-foundation
+      - build/bimspend-p0-auth-session
+      - build/bimspend-p0-security-hardening
   workflow_dispatch:
 
 jobs:

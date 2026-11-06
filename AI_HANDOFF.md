@@ -18,6 +18,8 @@ P1-01 through P1-07 were completed as a static/research audit. The full evidence
 
 P0-001 through P0-010 were completed on branch `build/bimspend-p0-auth-session` at commit `3e61aaf1f24fb692718e514010f0aee36a6ff69e`. All 62 domain tests pass.
 
+SH-001/SH-002/SH-003 security hardening was completed on branch `build/bimspend-p0-security-hardening`. All 88 domain tests and 3 GUI tests pass. Schema migrated to v5 (companies.is_active, time_entries.company_id). PBKDF2 iterations raised to 210,000 with rehash-on-login.
+
 Pinned primary revisions:
 
 - Miru: `10e457e1d0cd2ac782be9d1edbcbd5a1a573486a` (`develop`)
