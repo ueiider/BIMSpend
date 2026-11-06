@@ -1,4 +1,4 @@
-"""Financial Reports Screen - BIMSpend R1-07.
+"""Financial Reports Screen - BIMSpend R1-08.
 
 Exportable financial reports:
 - Project cost summary
@@ -7,20 +7,27 @@ Exportable financial reports:
 - Project labour utilization
 - Approved hours by project
 - Financial variance
-- Cost trend by period
 
 CSV export supported. All exports respect company and role permissions.
+Uses the BIMSpend design system.
 """
 
 from __future__ import annotations
 
 import csv
-import io
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from decimal import Decimal
 from typing import Any, Optional
 
+from bimspend.app.design import (
+    ACCENT_BLUE,
+    APP_BG,
+    CARD_BG,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    format_aud,
+)
 from bimspend.app.screens.base import BaseScreen
 from bimspend.app.shell import BIMSpendApp
 from bimspend.financial import FinancialService, BudgetService, CostRateService
@@ -35,6 +42,7 @@ class FinancialReportsScreen(BaseScreen):
         self.financial_service = FinancialService(self.db)
         self.budget_service = BudgetService(self.db)
         self.cost_rate_service = CostRateService(self.db)
+        self._report_content: str = ""
 
     def on_show(self) -> None:
         """Refresh when shown."""
@@ -46,7 +54,10 @@ class FinancialReportsScreen(BaseScreen):
         app = self.app
 
         # Header
-        self._section_header("Financial Reports", "Exportable management reports — CSV format")
+        self._section_header(
+            "Reports and Analytics",
+            "Exportable management reports — CSV format",
+        )
 
         # Session info bar
         self._build_session_bar()
@@ -69,7 +80,7 @@ class FinancialReportsScreen(BaseScreen):
         if actor:
             ttk.Label(
                 frame,
-                text=f"Actor: {actor.id} ({actor.role.value})",
+                text=f"Actor: {actor.id}  ({actor.role.value})",
                 style="MetricLabel.TLabel",
             ).pack(side="left", padx=(0, 16))
             ttk.Label(
@@ -95,7 +106,9 @@ class FinancialReportsScreen(BaseScreen):
         frame = ttk.Frame(self, style="App.TFrame")
         frame.pack(fill="x", pady=(0, 16))
 
-        ttk.Label(frame, text="Report Type:").pack(side="left", padx=(0, 8))
+        ttk.Label(frame, text="Report Type:", style="MetricLabel.TLabel").pack(
+            side="left", padx=(0, 8)
+        )
 
         self._report_var = tk.StringVar(value="project_cost_summary")
         reports = [
@@ -121,7 +134,9 @@ class FinancialReportsScreen(BaseScreen):
         self._result_text = tk.Text(frame, height=20, wrap="none")
         self._result_text.pack(side="left", fill="both", expand=True)
 
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self._result_text.yview)
+        scrollbar = ttk.Scrollbar(
+            frame, orient="vertical", command=self._result_text.yview
+        )
         self._result_text.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
 
@@ -136,11 +151,17 @@ class FinancialReportsScreen(BaseScreen):
             command=self._generate_report,
         ).pack(side="left", padx=(0, 8))
 
-        ttk.Button(
-            frame,
-            text="Export CSV",
-            command=self._export_csv,
-        ).pack(side="left", padx=(0, 8))
+        actor = current_auth.actor
+        can_export = actor and actor.role in (
+            Role.MANAGER,
+            Role.ADMINISTRATOR,
+        )
+        if can_export:
+            ttk.Button(
+                frame,
+                text="Export CSV",
+                command=self._export_csv,
+            ).pack(side="left", padx=(0, 8))
 
         ttk.Button(
             frame,
@@ -177,7 +198,7 @@ class FinancialReportsScreen(BaseScreen):
             messagebox.showerror("Report Error", str(exc))
 
     def _format_currency(self, value: Decimal) -> str:
-        return f"AUD {value:,.2f}"
+        return format_aud(value)
 
     def _generate_project_cost_summary(self, company_id: str) -> None:
         """Generate project cost summary report."""
@@ -189,7 +210,9 @@ class FinancialReportsScreen(BaseScreen):
         lines.append(f"Company: {company_id}")
         lines.append(f"Generated: {self._now_iso()}")
         lines.append("")
-        lines.append(f"{'Project':<30} {'Budget':>14} {'Actual':>14} {'Remaining':>14} {'Util%':>8}")
+        lines.append(
+            f"{'Project':<30} {'Budget':>14} {'Actual':>14} {'Remaining':>14} {'Util%':>8}"
+        )
         lines.append("-" * 60)
 
         for s in summaries:
@@ -202,9 +225,15 @@ class FinancialReportsScreen(BaseScreen):
             )
 
         lines.append("-" * 60)
-        total_budget = sum((s.current_budget_aud for s in summaries), Decimal("0"))
-        total_actual = sum((s.approved_labour_cost_aud for s in summaries), Decimal("0"))
-        total_remaining = sum((s.remaining_budget_aud for s in summaries), Decimal("0"))
+        total_budget = sum(
+            (s.current_budget_aud for s in summaries), Decimal("0")
+        )
+        total_actual = sum(
+            (s.approved_labour_cost_aud for s in summaries), Decimal("0")
+        )
+        total_remaining = sum(
+            (s.remaining_budget_aud for s in summaries), Decimal("0")
+        )
         lines.append(
             f"{'TOTAL':<30} "
             f"{self._format_currency(total_budget):>14} "
@@ -215,6 +244,7 @@ class FinancialReportsScreen(BaseScreen):
 
         self._result_text.delete("1.0", tk.END)
         self._result_text.insert("1.0", "\n".join(lines))
+        self._report_content = "\n".join(lines)
 
     def _generate_budget_vs_actual(self, company_id: str) -> None:
         """Generate budget vs actual report."""
@@ -226,7 +256,9 @@ class FinancialReportsScreen(BaseScreen):
         lines.append(f"Company: {company_id}")
         lines.append(f"Generated: {self._now_iso()}")
         lines.append("")
-        lines.append(f"{'Project':<30} {'Budget':>14} {'Actual':>14} {'Variance':>14} {'Status':>14}")
+        lines.append(
+            f"{'Project':<30} {'Budget':>14} {'Actual':>14} {'Variance':>14} {'Status':>14}"
+        )
         lines.append("-" * 60)
 
         for s in summaries:
@@ -241,19 +273,21 @@ class FinancialReportsScreen(BaseScreen):
 
         self._result_text.delete("1.0", tk.END)
         self._result_text.insert("1.0", "\n".join(lines))
+        self._report_content = "\n".join(lines)
 
     def _generate_employee_labour_cost(self, company_id: str) -> None:
         """Generate employee labour cost report."""
-        # Get all approved entries for the company
         from bimspend.models import TimeEntryState
+
         entries = self.db.list_time_entries(state=TimeEntryState.APPROVED)
         entries = [e for e in entries if e.company_id == company_id]
 
-        # Group by employee
         by_employee: dict[str, dict[str, Any]] = {}
         for e in entries:
             if e.user_id not in by_employee:
-                member = next((m for m in self.db.list_members() if m.id == e.user_id), None)
+                member = next(
+                    (m for m in self.db.list_members() if m.id == e.user_id), None
+                )
                 by_employee[e.user_id] = {
                     "name": member.name if member else e.user_id,
                     "hours": 0.0,
@@ -274,7 +308,9 @@ class FinancialReportsScreen(BaseScreen):
         lines.append(f"Company: {company_id}")
         lines.append(f"Generated: {self._now_iso()}")
         lines.append("")
-        lines.append(f"{'Employee':<25} {'Hours':>10} {'Cost Rate':>14} {'Total Cost':>14}")
+        lines.append(
+            f"{'Employee':<25} {'Hours':>10} {'Cost Rate':>14} {'Total Cost':>14}"
+        )
         lines.append("-" * 60)
 
         total_cost = Decimal("0")
@@ -293,10 +329,13 @@ class FinancialReportsScreen(BaseScreen):
             total_hours += hours
 
         lines.append("-" * 60)
-        lines.append(f"{'TOTAL':<25} {total_hours:>9.2f} {'':>14} {self._format_currency(total_cost):>14}")
+        lines.append(
+            f"{'TOTAL':<25} {total_hours:>9.2f} {'':>14} {self._format_currency(total_cost):>14}"
+        )
 
         self._result_text.delete("1.0", tk.END)
         self._result_text.insert("1.0", "\n".join(lines))
+        self._report_content = "\n".join(lines)
 
     def _generate_approved_hours_by_project(self, company_id: str) -> None:
         """Generate approved hours by project report."""
@@ -308,7 +347,9 @@ class FinancialReportsScreen(BaseScreen):
         lines.append(f"Company: {company_id}")
         lines.append(f"Generated: {self._now_iso()}")
         lines.append("")
-        lines.append(f"{'Project':<30} {'Hours':>12} {'Cost (AUD)':>14} {'Billing (AUD)':>16}")
+        lines.append(
+            f"{'Project':<30} {'Hours':>12} {'Cost (AUD)':>14} {'Billing (AUD)':>16}"
+        )
         lines.append("-" * 60)
 
         for s in summaries:
@@ -321,6 +362,7 @@ class FinancialReportsScreen(BaseScreen):
 
         self._result_text.delete("1.0", tk.END)
         self._result_text.insert("1.0", "\n".join(lines))
+        self._report_content = "\n".join(lines)
 
     def _generate_financial_variance(self, company_id: str) -> None:
         """Generate financial variance report."""
@@ -332,7 +374,9 @@ class FinancialReportsScreen(BaseScreen):
         lines.append(f"Company: {company_id}")
         lines.append(f"Generated: {self._now_iso()}")
         lines.append("")
-        lines.append(f"{'Project':<30} {'Budget':>14} {'Actual':>14} {'Variance':>14} {'% Var':>8}")
+        lines.append(
+            f"{'Project':<30} {'Budget':>14} {'Actual':>14} {'Variance':>14} {'% Var':>8}"
+        )
         lines.append("-" * 60)
 
         for s in summaries:
@@ -351,6 +395,7 @@ class FinancialReportsScreen(BaseScreen):
 
         self._result_text.delete("1.0", tk.END)
         self._result_text.insert("1.0", "\n".join(lines))
+        self._report_content = "\n".join(lines)
 
     def _export_csv(self) -> None:
         """Export the current report to CSV."""
@@ -360,7 +405,7 @@ class FinancialReportsScreen(BaseScreen):
             return
 
         report_type = self._report_var.get()
-        content = self._result_text.get("1.0", tk.END).strip()
+        content = self._report_content.strip()
 
         if not content:
             messagebox.showinfo("Export CSV", "No report data to export.")
@@ -376,11 +421,9 @@ class FinancialReportsScreen(BaseScreen):
             return
 
         try:
-            # Parse the text report into CSV format
             lines = content.split("\n")
             with open(path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                # Skip header lines until we find the data header
                 data_started = False
                 for line in lines:
                     if line.startswith("=") or line.startswith("-") or not line.strip():
@@ -403,4 +446,5 @@ class FinancialReportsScreen(BaseScreen):
     @staticmethod
     def _now_iso() -> str:
         from datetime import datetime, timezone
+
         return datetime.now(timezone.utc).isoformat()

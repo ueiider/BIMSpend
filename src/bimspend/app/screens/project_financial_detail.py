@@ -1,4 +1,4 @@
-"""Project Financial Detail Screen - BIMSpend R1-07.
+"""Project Financial Detail Screen - BIMSpend R1-08.
 
 Detailed financial view for a single project:
 - Project information, budget and revisions
@@ -8,6 +8,7 @@ Detailed financial view for a single project:
 
 Company-scoped: managers/administrators can configure;
 designers can view read-only.
+Uses the BIMSpend design system.
 """
 
 from __future__ import annotations
@@ -17,9 +18,27 @@ from tkinter import ttk, messagebox
 from decimal import Decimal
 from typing import Any, Optional
 
+from bimspend.app.design import (
+    ACCENT_AMBER,
+    ACCENT_BLUE,
+    ACCENT_RED,
+    ACCENT_TEAL,
+    APP_BG,
+    CARD_BG,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    format_aud,
+    format_date_time,
+    format_minutes,
+)
 from bimspend.app.screens.base import BaseScreen
 from bimspend.app.shell import BIMSpendApp
-from bimspend.financial import FinancialDomainError, FinancialService, BudgetService, CostRateService
+from bimspend.financial import (
+    FinancialDomainError,
+    FinancialService,
+    BudgetService,
+    CostRateService,
+)
 from bimspend.identity import Role, current_auth
 
 
@@ -44,7 +63,10 @@ class ProjectFinancialDetailScreen(BaseScreen):
         app = self.app
 
         # Header
-        self._section_header("Project Financial Detail", "Approved time costs, budget consumption, and forecasting")
+        self._section_header(
+            "Project Financial Detail",
+            "Approved time costs, budget consumption, and forecasting",
+        )
 
         # Session info bar
         self._build_session_bar()
@@ -73,7 +95,7 @@ class ProjectFinancialDetailScreen(BaseScreen):
         if actor:
             ttk.Label(
                 frame,
-                text=f"Actor: {actor.id} ({actor.role.value})",
+                text=f"Actor: {actor.id}  ({actor.role.value})",
                 style="MetricLabel.TLabel",
             ).pack(side="left", padx=(0, 16))
             ttk.Label(
@@ -102,15 +124,25 @@ class ProjectFinancialDetailScreen(BaseScreen):
         inner = ttk.Frame(self._info_frame, style="Card.TFrame")
         inner.pack(fill="x", padx=16, pady=12)
 
-        ttk.Label(inner, text="Project Information", style="MetricLabel.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            inner,
+            text="Project Information",
+            style="MetricLabel.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
-        self._project_name_label = ttk.Label(inner, text="—", style="MetricValue.TLabel")
+        self._project_name_label = ttk.Label(
+            inner, text="—", style="MetricValue.TLabel"
+        )
         self._project_name_label.pack(anchor="w", pady=(0, 2))
 
-        self._project_client_label = ttk.Label(inner, text="", style="MetricLabel.TLabel")
+        self._project_client_label = ttk.Label(
+            inner, text="", style="MetricLabel.TLabel"
+        )
         self._project_client_label.pack(anchor="w", pady=(0, 2))
 
-        self._project_status_label = ttk.Label(inner, text="", style="MetricLabel.TLabel")
+        self._project_status_label = ttk.Label(
+            inner, text="", style="MetricLabel.TLabel"
+        )
         self._project_status_label.pack(anchor="w")
 
     def _build_budget_panel(self) -> None:
@@ -121,24 +153,41 @@ class ProjectFinancialDetailScreen(BaseScreen):
         inner = ttk.Frame(self._budget_frame, style="Card.TFrame")
         inner.pack(fill="x", padx=16, pady=12)
 
-        ttk.Label(inner, text="Budget Consumption", style="MetricLabel.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            inner, text="Budget Consumption", style="MetricLabel.TLabel"
+        ).pack(anchor="w", pady=(0, 8))
 
-        # Grid of budget metrics
         metrics_frame = ttk.Frame(inner, style="Card.TFrame")
         metrics_frame.pack(fill="x")
 
-        self._orig_budget_label = self._metric_row(metrics_frame, "Original Budget", "AUD 0.00")
-        self._current_budget_label = self._metric_row(metrics_frame, "Current Budget", "AUD 0.00")
-        self._actual_cost_label = self._metric_row(metrics_frame, "Actual Labour Cost", "AUD 0.00")
-        self._remaining_label = self._metric_row(metrics_frame, "Remaining Budget", "AUD 0.00")
-        self._utilization_label = self._metric_row(metrics_frame, "Utilization", "0.0%")
-        self._variance_label = self._metric_row(metrics_frame, "Variance", "AUD 0.00")
+        self._orig_budget_label = self._metric_row(
+            metrics_frame, "Original Budget", "AUD 0.00"
+        )
+        self._current_budget_label = self._metric_row(
+            metrics_frame, "Current Budget", "AUD 0.00"
+        )
+        self._actual_cost_label = self._metric_row(
+            metrics_frame, "Actual Labour Cost", "AUD 0.00"
+        )
+        self._remaining_label = self._metric_row(
+            metrics_frame, "Remaining Budget", "AUD 0.00"
+        )
+        self._utilization_label = self._metric_row(
+            metrics_frame, "Utilization", "0.0%"
+        )
+        self._variance_label = self._metric_row(
+            metrics_frame, "Variance", "AUD 0.00"
+        )
 
-    def _metric_row(self, parent: ttk.Widget, label: str, value: str) -> ttk.Label:
+    def _metric_row(
+        self, parent: ttk.Widget, label: str, value: str
+    ) -> ttk.Label:
         """Create a label-value metric row."""
         frame = ttk.Frame(parent, style="Card.TFrame")
         frame.pack(fill="x", pady=2, side="left", padx=(0, 24))
-        ttk.Label(frame, text=label, style="MetricLabel.TLabel").pack(anchor="w")
+        ttk.Label(frame, text=label, style="MetricLabel.TLabel").pack(
+            anchor="w"
+        )
         val_label = ttk.Label(frame, text=value, style="MetricValue.TLabel")
         val_label.pack(anchor="w", pady=(2, 0))
         return val_label
@@ -148,11 +197,19 @@ class ProjectFinancialDetailScreen(BaseScreen):
         frame = ttk.Frame(self, style="App.TFrame")
         frame.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text="Labour Cost by Employee", style="MetricLabel.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            frame,
+            text="Labour Cost by Employee",
+            style="MetricLabel.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
         cols = ("employee", "hours", "cost_rate", "cost_aud")
         self._tree = ttk.Treeview(
-            frame, columns=cols, show="headings", height=8
+            frame,
+            columns=cols,
+            show="headings",
+            height=8,
+            style="App.Treeview",
         )
         self._tree.heading("#0", text="Employee")
         self._tree.heading("employee", text="Employee")
@@ -166,7 +223,9 @@ class ProjectFinancialDetailScreen(BaseScreen):
         self._tree.column("cost_rate", width=140)
         self._tree.column("cost_aud", width=120)
 
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self._tree.yview)
+        scrollbar = ttk.Scrollbar(
+            frame, orient="vertical", command=self._tree.yview
+        )
         self._tree.configure(yscrollcommand=scrollbar.set)
 
         self._tree.pack(side="left", fill="both", expand=True)
@@ -180,12 +239,24 @@ class ProjectFinancialDetailScreen(BaseScreen):
         inner = ttk.Frame(self._forecast_frame, style="Card.TFrame")
         inner.pack(fill="x", padx=16, pady=12)
 
-        ttk.Label(inner, text="Forecast (Deterministic, Linear Burn Rate)", style="MetricLabel.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            inner,
+            text="Forecast (Deterministic, Linear Burn Rate)",
+            style="MetricLabel.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
-        self._forecast_actual_label = self._metric_row(inner, "Actual Cost to Date", "AUD 0.00")
-        self._forecast_burn_label = self._metric_row(inner, "Burn Rate (AUD/hr)", "AUD 0.00")
-        self._forecast_cost_label = self._metric_row(inner, "Forecast Cost at Completion", "AUD 0.00")
-        self._forecast_variance_label = self._metric_row(inner, "Forecast Budget Variance", "AUD 0.00")
+        self._forecast_actual_label = self._metric_row(
+            inner, "Actual Cost to Date", "AUD 0.00"
+        )
+        self._forecast_burn_label = self._metric_row(
+            inner, "Burn Rate (AUD/hr)", "AUD 0.00"
+        )
+        self._forecast_cost_label = self._metric_row(
+            inner, "Forecast Cost at Completion", "AUD 0.00"
+        )
+        self._forecast_variance_label = self._metric_row(
+            inner, "Forecast Budget Variance", "AUD 0.00"
+        )
 
     def _build_action_buttons(self) -> None:
         """Build action buttons."""
@@ -218,15 +289,15 @@ class ProjectFinancialDetailScreen(BaseScreen):
         if actor is None:
             return
 
-        # Determine project to show
         project_id = getattr(self.app, "current_project_id", None) or self._project_id
         if project_id is None:
-            # Try to get project name from app
             project_name = getattr(self.app, "current_project_name", None)
             if project_name:
-                # Find project by name
                 for p in self.db.list_projects():
-                    if p.name == project_name and (p.company_id is None or p.company_id == actor.company_id):
+                    if (
+                        p.name == project_name
+                        and (p.company_id is None or p.company_id == actor.company_id)
+                    ):
                         project_id = p.id
                         break
         if project_id is None:
@@ -234,46 +305,67 @@ class ProjectFinancialDetailScreen(BaseScreen):
 
         self._project_id = project_id
 
-        # Get financial summary
         try:
-            summary = self.financial_service.get_financial_summary(project_id, actor.company_id)
+            summary = self.financial_service.get_financial_summary(
+                project_id, actor.company_id
+            )
         except (PermissionError, FinancialDomainError) as exc:
             messagebox.showerror("Financial Error", str(exc))
             return
 
-        # Update project info
         project = self.db.get_project(project_id)
         if project:
             self._project_name_label.config(text=project.name)
-            self._project_client_label.config(text=f"Client: {project.client}")
-            self._project_status_label.config(text=f"Status: {project.is_archived and 'Archived' or 'Active'}")
+            self._project_client_label.config(
+                text=f"Client: {project.client}"
+            )
+            self._project_status_label.config(
+                text=f"Status: {'Archived' if project.is_archived else 'Active'}"
+            )
 
-        # Update budget metrics
-        self._orig_budget_label.config(text=f"AUD {summary.original_budget_aud:,.2f}")
-        self._current_budget_label.config(text=f"AUD {summary.current_budget_aud:,.2f}")
-        self._actual_cost_label.config(text=f"AUD {summary.approved_labour_cost_aud:,.2f}")
-        self._remaining_label.config(text=f"AUD {summary.remaining_budget_aud:,.2f}")
-        self._utilization_label.config(text=f"{summary.budget_utilization_percent:.1f}%")
-        self._variance_label.config(text=f"AUD {summary.budget_variance_aud:,.2f}")
+        self._orig_budget_label.config(
+            text=f"AUD {summary.original_budget_aud:,.2f}"
+        )
+        self._current_budget_label.config(
+            text=f"AUD {summary.current_budget_aud:,.2f}"
+        )
+        self._actual_cost_label.config(
+            text=f"AUD {summary.approved_labour_cost_aud:,.2f}"
+        )
+        self._remaining_label.config(
+            text=f"AUD {summary.remaining_budget_aud:,.2f}"
+        )
+        self._utilization_label.config(
+            text=f"{summary.budget_utilization_percent:.1f}%"
+        )
+        self._variance_label.config(
+            text=f"AUD {summary.budget_variance_aud:,.2f}"
+        )
 
-        # Color-code variance
         if summary.is_over_budget:
-            self._variance_label.config(foreground="#9B2C2C")
+            self._variance_label.config(foreground=ACCENT_RED)
         else:
-            self._variance_label.config(foreground="#287E72")
+            self._variance_label.config(foreground=ACCENT_TEAL)
 
-        # Update cost breakdown by employee
         self._tree.delete(*self._tree.get_children())
-        cost_by_user = self.financial_service.calculate_approved_labour_cost_by_user(
+        cost_by_user = (
+            self.financial_service.calculate_approved_labour_cost_by_user(
+                project_id, actor.company_id
+            )
+        )
+        entries = self.financial_service.get_approved_entries_for_project(
             project_id, actor.company_id
         )
-        entries = self.financial_service.get_approved_entries_for_project(project_id, actor.company_id)
         hours_by_user: dict[str, float] = {}
         for e in entries:
-            hours_by_user[e.user_id] = hours_by_user.get(e.user_id, 0.0) + e.minutes
+            hours_by_user[e.user_id] = (
+                hours_by_user.get(e.user_id, 0.0) + e.minutes
+            )
 
         for user_id, cost in cost_by_user.items():
-            member = next((m for m in self.db.list_members() if m.id == user_id), None)
+            member = next(
+                (m for m in self.db.list_members() if m.id == user_id), None
+            )
             name = member.name if member else user_id
             hours = hours_by_user.get(user_id, 0.0) / 60.0
             rate = cost / Decimal(str(hours)) if hours > 0 else Decimal("0")
@@ -289,12 +381,21 @@ class ProjectFinancialDetailScreen(BaseScreen):
                 ),
             )
 
-        # Update forecast
-        forecast = self.financial_service.forecast_cost_at_completion(project_id, actor.company_id)
-        self._forecast_actual_label.config(text=f"AUD {forecast['actual_cost_to_date']:,.2f}")
-        self._forecast_burn_label.config(text=f"AUD {forecast['burn_rate_per_hour']:,.2f}")
-        self._forecast_cost_label.config(text=f"AUD {forecast['forecast_cost_at_completion']:,.2f}")
-        self._forecast_variance_label.config(text=f"AUD {forecast['forecast_budget_variance']:,.2f}")
+        forecast = self.financial_service.forecast_cost_at_completion(
+            project_id, actor.company_id
+        )
+        self._forecast_actual_label.config(
+            text=f"AUD {forecast['actual_cost_to_date']:,.2f}"
+        )
+        self._forecast_burn_label.config(
+            text=f"AUD {forecast['burn_rate_per_hour']:,.2f}"
+        )
+        self._forecast_cost_label.config(
+            text=f"AUD {forecast['forecast_cost_at_completion']:,.2f}"
+        )
+        self._forecast_variance_label.config(
+            text=f"AUD {forecast['forecast_budget_variance']:,.2f}"
+        )
 
     def _back_to_dashboard(self) -> None:
         """Return to financial dashboard."""
