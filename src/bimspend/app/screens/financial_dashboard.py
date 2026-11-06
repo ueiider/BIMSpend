@@ -1,4 +1,4 @@
-"""Financial Dashboard Screen - BIMSpend R1-07.
+"""Financial Dashboard Screen - BIMSpend R1-08.
 
 Management dashboard showing project financial summaries:
 - Active projects, total budget, actual labour cost, remaining budget
@@ -7,6 +7,7 @@ Management dashboard showing project financial summaries:
 
 All data derived from approved time entries only.
 Company-scoped: managers/administrators only.
+Uses the BIMSpend design system.
 """
 
 from __future__ import annotations
@@ -16,6 +17,17 @@ from tkinter import ttk, messagebox
 from decimal import Decimal
 from typing import Any, Optional
 
+from bimspend.app.design import (
+    ACCENT_AMBER,
+    ACCENT_BLUE,
+    ACCENT_RED,
+    ACCENT_TEAL,
+    APP_BG,
+    CARD_BG,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    format_aud,
+)
 from bimspend.app.screens.base import BaseScreen
 from bimspend.app.shell import BIMSpendApp
 from bimspend.financial import FinancialService, BudgetService, CostRateService
@@ -30,7 +42,6 @@ class FinancialDashboardScreen(BaseScreen):
         self.financial_service = FinancialService(self.db)
         self.budget_service = BudgetService(self.db)
         self.cost_rate_service = CostRateService(self.db)
-        self._summary_cards: list[ttk.Frame] = []
 
     def on_show(self) -> None:
         """Refresh when shown."""
@@ -42,7 +53,10 @@ class FinancialDashboardScreen(BaseScreen):
         app = self.app
 
         # Header
-        self._section_header("Financial Dashboard", "Project costing and budget consumption — approved time only")
+        self._section_header(
+            "Financial Management",
+            "Project costing and budget consumption — approved time only",
+        )
 
         # Session info bar
         self._build_session_bar()
@@ -50,7 +64,12 @@ class FinancialDashboardScreen(BaseScreen):
         # Metric row
         self._build_metric_row()
 
+        self._divider()
+
         # Project financial summaries table
+        self._section_header(
+            "Project Financial Summaries", "Budget vs actual cost by project"
+        )
         self._build_project_table()
 
         # Action buttons
@@ -68,7 +87,7 @@ class FinancialDashboardScreen(BaseScreen):
         if actor:
             ttk.Label(
                 frame,
-                text=f"Actor: {actor.id} ({actor.role.value})",
+                text=f"Actor: {actor.id}  ({actor.role.value})",
                 style="MetricLabel.TLabel",
             ).pack(side="left", padx=(0, 16))
             ttk.Label(
@@ -92,20 +111,61 @@ class FinancialDashboardScreen(BaseScreen):
     def _build_metric_row(self) -> None:
         """Build the top metric cards."""
         frame = ttk.Frame(self, style="App.TFrame")
-        frame.pack(fill="x", pady=(0, 16))
+        frame.pack(fill="x", pady=(0, 24))
 
-        self._total_budget_card = self._metric_card(
-            frame, "Total Current Budget", "AUD 0.00", "All projects"
+        actor = current_auth.actor
+        if actor is None:
+            return
+
+        summaries = self.financial_service.get_all_financial_summaries(
+            actor.company_id
         )
-        self._actual_cost_card = self._metric_card(
-            frame, "Actual Approved Labour Cost", "AUD 0.00", "From approved entries"
-        )
-        self._remaining_card = self._metric_card(
-            frame, "Remaining Budget", "AUD 0.00", "Budget minus actual cost"
-        )
-        self._over_budget_card = self._metric_card(
-            frame, "Over-Budget Projects", "0", "Projects exceeding budget"
-        )
+
+        total_budget = Decimal("0")
+        total_actual = Decimal("0")
+        total_remaining = Decimal("0")
+        over_budget_count = 0
+
+        for summary in summaries:
+            total_budget += summary.current_budget_aud
+            total_actual += summary.approved_labour_cost_aud
+            total_remaining += summary.remaining_budget_aud
+            if summary.is_over_budget:
+                over_budget_count += 1
+
+        cards = [
+            (
+                "Total Current Budget",
+                format_aud(total_budget),
+                "All projects",
+                ACCENT_BLUE,
+            ),
+            (
+                "Actual Approved Labour Cost",
+                format_aud(total_actual),
+                "From approved entries",
+                ACCENT_TEAL,
+            ),
+            (
+                "Remaining Budget",
+                format_aud(total_remaining),
+                "Budget minus actual cost",
+                ACCENT_TEAL if total_remaining >= 0 else ACCENT_RED,
+            ),
+            (
+                "Over-Budget Projects",
+                str(over_budget_count),
+                "Projects exceeding budget",
+                ACCENT_RED if over_budget_count > 0 else ACCENT_TEAL,
+            ),
+        ]
+
+        for i, (label, value, sublabel, color) in enumerate(cards):
+            card = self._metric_card(
+                frame, label, value, sublabel, color=color
+            )
+            card.grid(row=0, column=i, padx=4, pady=4, sticky="ew")
+            frame.columnconfigure(i, weight=1)
 
     def _build_project_table(self) -> None:
         """Build the project financial summaries table."""
@@ -121,7 +181,11 @@ class FinancialDashboardScreen(BaseScreen):
             "status",
         )
         self._tree = ttk.Treeview(
-            frame, columns=cols, show="headings", height=12
+            frame,
+            columns=cols,
+            show="headings",
+            height=12,
+            style="App.Treeview",
         )
         self._tree.heading("#0", text="Project")
         self._tree.heading("project", text="Project")
@@ -139,7 +203,9 @@ class FinancialDashboardScreen(BaseScreen):
         self._tree.column("utilization", width=100)
         self._tree.column("status", width=100)
 
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self._tree.yview)
+        scrollbar = ttk.Scrollbar(
+            frame, orient="vertical", command=self._tree.yview
+        )
         self._tree.configure(yscrollcommand=scrollbar.set)
 
         self._tree.pack(side="left", fill="both", expand=True)
@@ -150,23 +216,26 @@ class FinancialDashboardScreen(BaseScreen):
         frame = ttk.Frame(self, style="App.TFrame")
         frame.pack(fill="x", pady=(8, 0))
 
+        actor = current_auth.actor
+        can_manage = actor and actor.role in (Role.MANAGER, Role.ADMINISTRATOR)
+
         ttk.Button(
             frame,
             text="Project Detail",
             command=self._view_project_detail,
         ).pack(side="left", padx=(0, 8))
 
-        ttk.Button(
-            frame,
-            text="Manage Rates",
-            command=self._manage_rates,
-        ).pack(side="left", padx=(0, 8))
-
-        ttk.Button(
-            frame,
-            text="Manage Budgets",
-            command=self._manage_budgets,
-        ).pack(side="left", padx=(0, 8))
+        if can_manage:
+            ttk.Button(
+                frame,
+                text="Manage Rates",
+                command=self._manage_rates,
+            ).pack(side="left", padx=(0, 8))
+            ttk.Button(
+                frame,
+                text="Manage Budgets",
+                command=self._manage_budgets,
+            ).pack(side="left", padx=(0, 8))
 
         ttk.Button(
             frame,
@@ -180,16 +249,13 @@ class FinancialDashboardScreen(BaseScreen):
         if actor is None:
             return
 
-        # Clear metric cards
-        for card in self._summary_cards:
-            card.destroy()
-        self._summary_cards.clear()
-
         # Clear tree
         self._tree.delete(*self._tree.get_children())
 
         # Get all financial summaries for this company
-        summaries = self.financial_service.get_all_financial_summaries(actor.company_id)
+        summaries = self.financial_service.get_all_financial_summaries(
+            actor.company_id
+        )
 
         total_budget = Decimal("0")
         total_actual = Decimal("0")
@@ -203,49 +269,34 @@ class FinancialDashboardScreen(BaseScreen):
             if summary.is_over_budget:
                 over_budget_count += 1
 
-            # Determine status color
             if summary.is_over_budget:
                 status = "OVER BUDGET"
-                status_color = "#9B2C2C"
+                status_color = ACCENT_RED
             elif summary.budget_utilization_percent > 80:
                 status = "APPROACHING LIMIT"
-                status_color = "#B8860B"
+                status_color = ACCENT_AMBER
             else:
                 status = "ON TRACK"
-                status_color = "#287E72"
+                status_color = ACCENT_TEAL
 
             self._tree.insert(
                 "",
                 "end",
                 values=(
                     summary.project_name,
-                    f"{summary.current_budget_aud:,.2f}",
-                    f"{summary.approved_labour_cost_aud:,.2f}",
-                    f"{summary.remaining_budget_aud:,.2f}",
-                    f"{summary.budget_utilization_percent:.1f}",
+                    format_aud(summary.current_budget_aud),
+                    format_aud(summary.approved_labour_cost_aud),
+                    format_aud(summary.remaining_budget_aud),
+                    f"{summary.budget_utilization_percent:.1f}%",
                     status,
                 ),
-                tags=(status_color,),
+                tags=(status,),
             )
 
-        # Update metric cards
-        self._total_budget_card.winfo_children()[1].winfo_children()[1].config(
-            text=f"AUD {total_budget:,.2f}"
-        )
-        self._actual_cost_card.winfo_children()[1].winfo_children()[1].config(
-            text=f"AUD {total_actual:,.2f}"
-        )
-        self._remaining_card.winfo_children()[1].winfo_children()[1].config(
-            text=f"AUD {total_remaining:,.2f}"
-        )
-        self._over_budget_card.winfo_children()[1].winfo_children()[1].config(
-            text=str(over_budget_count)
-        )
-
         # Configure status tag colors
-        self._tree.tag_configure("#9B2C2C", foreground="#9B2C2C")
-        self._tree.tag_configure("#B8860B", foreground="#B8860B")
-        self._tree.tag_configure("#287E72", foreground="#287E72")
+        self._tree.tag_configure("OVER BUDGET", foreground=ACCENT_RED)
+        self._tree.tag_configure("APPROACHING LIMIT", foreground=ACCENT_AMBER)
+        self._tree.tag_configure("ON TRACK", foreground=ACCENT_TEAL)
 
     def _view_project_detail(self) -> None:
         """View financial detail for selected project."""
@@ -257,9 +308,7 @@ class FinancialDashboardScreen(BaseScreen):
         item = self._tree.item(selection[0])
         project_name = item["values"][0]
 
-        # Navigate to project detail screen
         self.app.show_screen("project_financial_detail")
-        # The detail screen would need to know which project — we set it via app
         self.app.current_project_name = project_name
 
     def _manage_rates(self) -> None:
