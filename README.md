@@ -2,6 +2,30 @@
 
 Development was authorized on 2026-11-05. The independent B2-A audit was deferred, **not approved**. This preview uses synthetic fixtures only; it does not collect employee activity, connect to Revit, synchronize with Miru or deploy to production.
 
+## Interactive Visual Prototype (NEW)
+
+A complete browser-based interactive prototype is available in `design/interactive-mockup/`:
+
+```bash
+cd design/interactive-mockup
+python3 -m http.server 8080
+# Open http://localhost:8080
+```
+
+**Features:**
+- 20 fully functional screens (16 primary + 4 designer-specific)
+- 5 detail screens with route parameters
+- Role-based access control (Administrator / Manager / Designer)
+- Light/Dark theme switching with localStorage persistence
+- Responsive design (1920×1080, 1440×900, 1280×800, 768×1024)
+- Australian demo data (AUD currency, Australian dates, fictional BIM company)
+- Interactive quote calculator with real-time calculations
+- Timesheet workflow (draft → submit → approve/reject → bill)
+- CSV export for reports
+- Zero JavaScript console errors
+
+See `design/interactive-mockup/QA_VALIDATION_REPORT.md` for full test results.
+
 ## Download the Windows preview
 
 Open the latest successful [Package Windows synthetic preview](https://github.com/ueiider/BIMSpend/actions/workflows/windows-preview.yml) run on `main` and download the `BIMSpend-Windows-Synthetic-Preview` artifact. Extract the **entire** folder, keeping `BIMSpend.exe` beside its `_internal` directory. Run `BIMSpend.exe` on Windows. The source SHA is in `SOURCE_COMMIT.txt` in the extracted folder. The synthetic database is stored under `%LOCALAPPDATA%\BIMSpend\preview\bimspend.db`; keep a backup before deleting or resetting it. The artifact is a one-folder preview, not a signed installer or a production build.

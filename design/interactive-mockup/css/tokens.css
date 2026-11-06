@@ -1,0 +1,175 @@
+/* BIMSpend Design Tokens */
+/* Premium commercial SaaS interface - Dark navy sidebar, clean white surfaces, professional blue accents */
+
+:root {
+  /* Color Palette */
+  --color-ink: #172B3A;
+  --color-ink-light: #2D4A5E;
+  --color-navy: #14324A;
+  --color-navy-light: #1E4A6B;
+  --color-primary: #1976A5;
+  --color-primary-hover: #146088;
+  --color-primary-light: #E8F4FA;
+  --color-teal: #287E72;
+  --color-teal-hover: #1F665C;
+  --color-teal-light: #E6F4F3;
+  --color-amber: #A96512;
+  --color-amber-hover: #8A530F;
+  --color-amber-light: #FEF3E2;
+  --color-red: #B23B3B;
+  --color-red-hover: #923030;
+  --color-red-light: #FDEEEE;
+  --color-green: #1E7E34;
+  --color-green-light: #E8F7EC;
+  --color-canvas: #F4F7F9;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F8FAFC;
+  --color-border: #D9E1E7;
+  --color-border-strong: #C0CAD8;
+  --color-text-primary: #172B3A;
+  --color-text-secondary: #546B7D;
+  --color-text-muted: #8B9BAE;
+  --color-text-inverse: #FFFFFF;
+  --color-text-on-primary: #FFFFFF;
+  --color-focus: #1976A5;
+  --color-focus-ring: rgba(25, 118, 165, 0.3);
+
+  /* Spacing Scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+  --font-size-4xl: 28px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(20, 50, 74, 0.05);
+  --shadow-sm: 0 1px 3px rgba(20, 50, 74, 0.08), 0 1px 2px rgba(20, 50, 74, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(20, 50, 74, 0.08), 0 2px 4px -1px rgba(20, 50, 74, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(20, 50, 74, 0.08), 0 4px 6px -2px rgba(20, 50, 74, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(20, 50, 74, 0.08), 0 10px 10px -5px rgba(20, 50, 74, 0.04);
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Z-Index Scale */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 56px;
+  --content-max-width: 1400px;
+
+  /* Status Colors */
+  --status-observed: #546B7D;
+  --status-suggested: #A96512;
+  --status-confirmed: #1976A5;
+  --status-submitted: #1976A5;
+  --status-approved: #287E72;
+  --status-rejected: #B23B3B;
+  --status-billed: #1E7E34;
+  --status-draft: #546B7D;
+  --status-pending: #A96512;
+  --status-active: #287E72;
+  --status-idle: #A96512;
+  --status-offline: #8B9BAE;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+  --color-ink: #E8EBEF;
+  --color-ink-light: #C9CED6;
+  --color-navy: #0F1F2E;
+  --color-navy-light: #163047;
+  --color-primary: #3B9BD9;
+  --color-primary-hover: #5AB3E0;
+  --color-primary-light: #163047;
+  --color-teal: #40C9B3;
+  --color-teal-hover: #5FD1BE;
+  --color-teal-light: #0F2A27;
+  --color-amber: #D4A03A;
+  --color-amber-hover: #DEB55D;
+  --color-amber-light: #2E2510;
+  --color-red: #E87A7A;
+  --color-red-hover: #EF9595;
+  --color-red-light: #2E1A1A;
+  --color-green: #50D06C;
+  --color-green-light: #132A18;
+  --color-canvas: #0D1B2A;
+  --color-surface: #142B40;
+  --color-surface-hover: #1A3A54;
+  --color-border: #2A4A65;
+  --color-border-strong: #3A5A75;
+  --color-text-primary: #E8EBEF;
+  --color-text-secondary: #A8B8C8;
+  --color-text-muted: #7A8A9A;
+  --color-text-inverse: #0D1B2A;
+  --color-text-on-primary: #0D1B2A;
+  --color-focus: #3B9BD9;
+  --color-focus-ring: rgba(59, 155, 217, 0.4);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  --status-observed: #7A8A9A;
+  --status-suggested: #D4A03A;
+  --status-confirmed: #3B9BD9;
+  --status-submitted: #3B9BD9;
+  --status-approved: #40C9B3;
+  --status-rejected: #E87A7A;
+  --status-billed: #50D06C;
+  --status-draft: #7A8A9A;
+  --status-pending: #D4A03A;
+  --status-active: #40C9B3;
+  --status-idle: #D4A03A;
+  --status-offline: #7A8A9A;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0ms;
+    --transition-normal: 0ms;
+    --transition-slow: 0ms;
+  }
+}
