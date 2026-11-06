@@ -19,6 +19,9 @@ Schema versions:
       access enforcement at the record level.
   v6: Activity event company scoping — added company_id to activity_events
       for tenant isolation of captured activity events.
+  v7: Revit connector integration — added revit_sessions, revit_documents,
+      revit_document_mappings, revit_correlation_evidence tables for
+      Revit session tracking, document identity, and project correlation.
 """
 
 from __future__ import annotations
@@ -81,9 +84,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 6:
+            if version is not None and version > 7:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 6")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 7")
         self._create_tables()
         self._migrate()
 
@@ -400,6 +403,100 @@ class Database:
                 )
                 self.conn.execute(
                     "INSERT INTO schema_version(version,applied_at) VALUES (6,?)", (_now_iso(),))
+        # v7 migration: Revit connector integration — revit_sessions,
+        # revit_documents, revit_document_mappings, revit_correlation_evidence
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 7").fetchone():
+            with self.transaction():
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS revit_sessions (
+                        id TEXT PRIMARY KEY,
+                        process_id INTEGER NOT NULL,
+                        session_guid TEXT NOT NULL,
+                        revit_version TEXT,
+                        started_at TEXT NOT NULL,
+                        last_activity_at TEXT NOT NULL,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        company_id TEXT REFERENCES companies(id)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS revit_documents (
+                        id TEXT PRIMARY KEY,
+                        document_guid TEXT NOT NULL UNIQUE,
+                        document_title TEXT NOT NULL,
+                        document_path_hash TEXT,
+                        is_workshared INTEGER NOT NULL DEFAULT 0,
+                        central_path_hash TEXT,
+                        document_type TEXT,
+                        created_at TEXT NOT NULL,
+                        last_seen_at TEXT NOT NULL,
+                        company_id TEXT REFERENCES companies(id)
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS revit_document_mappings (
+                        id TEXT PRIMARY KEY,
+                        document_guid TEXT NOT NULL REFERENCES revit_documents(document_guid),
+                        project_id TEXT NOT NULL REFERENCES projects(id),
+                        mapping_method TEXT NOT NULL CHECK(mapping_method IN ('explicit', 'stable_id', 'project_code', 'historical')),
+                        confidence TEXT NOT NULL CHECK(confidence IN ('CONFIRMED', 'HIGH', 'MEDIUM', 'LOW', 'UNASSIGNED')),
+                        mapped_by TEXT,
+                        mapped_at TEXT NOT NULL,
+                        reason TEXT,
+                        is_active INTEGER NOT NULL DEFAULT 1
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS revit_correlation_evidence (
+                        id TEXT PRIMARY KEY,
+                        session_id TEXT NOT NULL REFERENCES revit_sessions(id),
+                        document_guid TEXT NOT NULL REFERENCES revit_documents(document_guid),
+                        activity_event_id TEXT REFERENCES activity_events(id),
+                        foreground_duration_seconds REAL NOT NULL,
+                        is_afk INTEGER NOT NULL DEFAULT 0,
+                        is_locked INTEGER NOT NULL DEFAULT 0,
+                        correlation_confidence TEXT NOT NULL,
+                        correlation_method TEXT,
+                        recorded_at TEXT NOT NULL
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_sessions_company ON revit_sessions(company_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_sessions_active ON revit_sessions(is_active)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_documents_company ON revit_documents(company_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_documents_guid ON revit_documents(document_guid)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_mappings_project ON revit_document_mappings(project_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_mappings_document ON revit_document_mappings(document_guid)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_evidence_session ON revit_correlation_evidence(session_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_evidence_document ON revit_correlation_evidence(document_guid)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_revit_evidence_activity ON revit_correlation_evidence(activity_event_id)"
+                )
+                self.conn.execute(
+                    "INSERT INTO schema_version(version,applied_at) VALUES (7,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects

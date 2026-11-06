@@ -59,7 +59,7 @@ def test_version_tracking_preserves_legacy_project(tmp_path):
         db.close()
     reopened = Database(path)
     try:
-        assert reopened.conn.execute("SELECT count(*) FROM schema_version").fetchone()[0] == 6
+        assert reopened.conn.execute("SELECT count(*) FROM schema_version").fetchone()[0] == 7
         assert reopened.get_project("old").name == "Legacy"
     finally:
         reopened.close()
@@ -118,13 +118,13 @@ def test_archive_roundtrip_and_unique_source_attribution(tmp_path):
     db.upsert_time_entry(entry)
     with pytest.raises(sqlite3.IntegrityError):
         db.upsert_time_entry(TimeEntry("other", "a", "p", "designer_01", 15))
-    assert db.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 6
+    assert db.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 7
     db.close()
     reopened = Database(path)
     assert reopened.list_attributed_time()[0].is_archived
     assert reopened.get_time_entry("e").is_archived
     assert reopened.get_time_entry("e").state == TimeEntryState.APPROVED
-    assert reopened.conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 6
+    assert reopened.conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 7
     assert reopened.conn.execute("PRAGMA foreign_key_check").fetchall() == []
     reopened.close()
 
@@ -146,7 +146,7 @@ def test_duplicate_legacy_rows_block_migration_without_deletion(tmp_path):
         Database(path)
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT count(*) FROM time_entries").fetchone()[0] == 2
-        assert conn.execute("SELECT max(version) FROM schema_version").fetchone()[0] == 6
+        assert conn.execute("SELECT max(version) FROM schema_version").fetchone()[0] == 7
 
 
 def test_reject_newer_schema_without_mutating_file(tmp_path):
@@ -258,5 +258,5 @@ def test_identity_map_repeatable_on_reopen(tmp_path):
     assert len(maps) == 1
     assert maps[0].historical_user_id == "designer_01"
     assert maps[0].mapping_status == "unresolved"
-    assert db2.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 6
+    assert db2.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 7
     db2.close()
