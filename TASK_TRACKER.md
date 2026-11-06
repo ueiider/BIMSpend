@@ -29,3 +29,13 @@ Preferred direction: Miru administrative foundation + existing Miru agent API; A
 ## Working rules
 
 Build remains blocked. Update status only with evidence. Use synthetic/test data. Never infer actual or billable time from foreground activity. Do not modify FBT Revit Academy. Tests not executed are marked **NÃO VALIDADO**.
+
+## 2026-11-06 independent-product audit checkpoint
+
+- [x] Inventory all 29 observed remote branches and assess main, R1-08 and recovered FCC.
+- [x] Verify synthetic tests and GitHub Actions/preview evidence with exact SHAs.
+- [x] Classify actual ActivityWatch source reuse, Miru candidates and FCC runtime boundaries.
+- [ ] M1 choose and verify a consolidated baseline. Fix Linux test collection and run full Windows tests at the exact candidate SHA.
+- [ ] M2 wire injected capture through interval closure, SQLite and suggestions under isolated tests.
+- [ ] M3 reconcile the Revit host contract and compile/test supported versions in an isolated setup.
+- [ ] M4–M8 follow the [professional roadmap](docs/roadmap/BIMSPEND_PROFESSIONAL_DELIVERY_ROADMAP.md). [Audit handoff](docs/agents/AI_HANDOFF.md) contains blockers and ownership.
