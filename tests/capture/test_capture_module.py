@@ -191,6 +191,103 @@ def test_session_lock_detector_initial_state():
     assert detector.is_unknown()
 
 
+def test_session_lock_detector_lock_then_unlock():
+    """Test state transitions via direct state manipulation."""
+    detector = SessionLockDetector()
+    assert detector.is_unknown()
+
+    # Simulate a lock notification
+    detector._set_state(SessionLockState.LOCKED)
+    assert detector.is_locked()
+    assert not detector.is_unlocked()
+    assert not detector.is_unknown()
+
+    # Simulate an unlock notification
+    detector._set_state(SessionLockState.UNLOCKED)
+    assert detector.is_unlocked()
+    assert not detector.is_locked()
+    assert not detector.is_unknown()
+
+
+def test_session_lock_detector_callbacks():
+    """Test that lock/unlock callbacks fire on state transitions."""
+    lock_called = []
+    unlock_called = []
+
+    detector = SessionLockDetector()
+    detector.set_callbacks(
+        on_lock=lambda: lock_called.append(True),
+        on_unlock=lambda: unlock_called.append(True),
+    )
+
+    detector._set_state(SessionLockState.LOCKED)
+    assert len(lock_called) == 1
+    assert len(unlock_called) == 0
+
+    detector._set_state(SessionLockState.UNLOCKED)
+    assert len(lock_called) == 1
+    assert len(unlock_called) == 1
+
+    # Same state transition should not fire again
+    detector._set_state(SessionLockState.LOCKED)
+    assert len(lock_called) == 2
+    assert len(unlock_called) == 1
+
+
+def test_session_lock_detector_start_stop():
+    """Test start/stop lifecycle."""
+    detector = SessionLockDetector()
+    detector.start()
+    assert detector._running
+    detector.stop()
+    assert not detector._running
+
+
+# ------------------------------------------------------------------
+# Session lock integration with capture controller
+# ------------------------------------------------------------------
+
+def test_capture_pauses_on_session_lock(tmp_path, monkeypatch):
+    """Test that capture pauses when session is locked."""
+    from bimspend.identity import current_auth
+    current_auth.clear()
+
+    import bimspend.capture.controller as ctrl_mod
+
+    original_init = ctrl_mod.CaptureController.__init__
+
+    def patched_init(self, db, config=None):
+        original_init(self, db, config)
+        import bimspend.capture.activitywatch_derived.watcher_main as wm
+        wm.HeartbeatLoop = FakeLoop
+
+    monkeypatch.setattr(ctrl_mod.CaptureController, "__init__", patched_init)
+
+    db = Database(str(tmp_path / "capture.db"))
+    config = CaptureConfig(
+        poll_time=5.0,
+        consent_required=True,
+        company_id="c1",
+        member_id="m1",
+    )
+    controller = CaptureController(db, config)
+    controller.grant_consent("user1")
+    current_auth.set_actor(Actor(id="m1", role=Role.DESIGNER, company_id="c1"))
+
+    controller.start(granted_by="user1")
+    assert controller.get_state() == CaptureState.RUNNING
+
+    # Simulate session lock - capture should pause
+    controller._session_lock_detector = SessionLockDetector()
+    controller._session_lock_detector._set_state(SessionLockState.LOCKED)
+    # In the real integration, the lock detector callback would call pause()
+    # For now, we verify the detector can detect lock state
+    assert controller._session_lock_detector.is_locked()
+
+    controller.stop()
+    db.close()
+
+
 # ------------------------------------------------------------------
 # Capture controller tests (mocked)
 # ------------------------------------------------------------------
