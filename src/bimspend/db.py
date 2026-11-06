@@ -22,6 +22,8 @@ Schema versions:
   v7: Revit connector integration — added revit_sessions, revit_documents,
       revit_document_mappings, revit_correlation_evidence tables for
       Revit session tracking, document identity, and project correlation.
+  v8: Automatic timesheet suggestions — added time_entry_suggestions table
+      for auto-generated time entry suggestions awaiting designer review.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ from .models import (
     TeamMember,
     TimeEntry,
     TimeEntryState,
+    TimeEntrySuggestion,
     UserIdentityMap,
 )
 
@@ -84,9 +87,9 @@ class Database:
         self._write_depth = 0
         if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone():
             version = self.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-            if version is not None and version > 7:
+            if version is not None and version > 8:
                 self.conn.close()
-                raise RuntimeError(f"Database schema version {version} is newer than supported version 7")
+                raise RuntimeError(f"Database schema version {version} is newer than supported version 8")
         self._create_tables()
         self._migrate()
 
@@ -497,6 +500,49 @@ class Database:
                 )
                 self.conn.execute(
                     "INSERT INTO schema_version(version,applied_at) VALUES (7,?)", (_now_iso(),))
+        # v8 migration: automatic timesheet suggestions — time_entry_suggestions
+        # table for auto-generated suggestions awaiting designer review.
+        if not self.conn.execute("SELECT 1 FROM schema_version WHERE version = 8").fetchone():
+            with self.transaction():
+                self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS time_entry_suggestions (
+                        id TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        company_id TEXT REFERENCES companies(id),
+                        project_id TEXT REFERENCES projects(id),
+                        start_time TEXT NOT NULL,
+                        end_time TEXT NOT NULL,
+                        suggested_minutes REAL NOT NULL,
+                        confidence TEXT NOT NULL CHECK(confidence IN ('CONFIRMED', 'HIGH', 'MEDIUM', 'LOW', 'UNASSIGNED')),
+                        evidence_ids TEXT NOT NULL DEFAULT '[]',
+                        state TEXT NOT NULL DEFAULT 'pending_review',
+                        edited_minutes REAL,
+                        edited_project_id TEXT REFERENCES projects(id),
+                        review_notes TEXT,
+                        submitted_by TEXT,
+                        submitted_at TEXT,
+                        reviewed_by TEXT,
+                        reviewed_at TEXT,
+                        time_entry_id TEXT REFERENCES time_entries(id),
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestions_user ON time_entry_suggestions(user_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestions_user_state ON time_entry_suggestions(user_id,state)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestions_project ON time_entry_suggestions(project_id)"
+                )
+                self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_suggestions_time_entry ON time_entry_suggestions(time_entry_id)"
+                )
+                self.conn.execute(
+                    "INSERT INTO schema_version(version,applied_at) VALUES (8,?)", (_now_iso(),))
 
     # ------------------------------------------------------------------
     # Projects
@@ -830,6 +876,110 @@ class Database:
                      None, None, None, _now_iso()),
                 )
             self._commit()
+
+    # ------------------------------------------------------------------
+    # Time entry suggestions
+    # ------------------------------------------------------------------
+    @atomic_write
+    def upsert_suggestion(self, suggestion: TimeEntrySuggestion) -> bool:
+        """Upsert a time entry suggestion.
+
+        Returns True if inserted, False if duplicate (same id already exists).
+        Idempotent — saving the same suggestion twice is a no-op.
+        """
+        import json
+
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO time_entry_suggestions
+                    (id, user_id, company_id, project_id, start_time, end_time,
+                     suggested_minutes, confidence, evidence_ids, state,
+                     edited_minutes, edited_project_id, review_notes,
+                     submitted_by, submitted_at, reviewed_by, reviewed_at,
+                     time_entry_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO NOTHING
+                """,
+                (
+                    suggestion.id,
+                    suggestion.user_id,
+                    suggestion.company_id,
+                    suggestion.project_id,
+                    suggestion.start_time,
+                    suggestion.end_time,
+                    suggestion.suggested_minutes,
+                    suggestion.confidence,
+                    json.dumps(suggestion.evidence_ids),
+                    suggestion.state,
+                    suggestion.edited_minutes,
+                    suggestion.edited_project_id,
+                    suggestion.review_notes,
+                    suggestion.submitted_by,
+                    suggestion.submitted_at,
+                    suggestion.reviewed_by,
+                    suggestion.reviewed_at,
+                    suggestion.time_entry_id,
+                    suggestion.created_at,
+                ),
+            )
+            self._commit()
+            return True
+        except sqlite3.IntegrityError:
+            # Duplicate id — already exists
+            return False
+
+    def get_suggestion(self, suggestion_id: str) -> TimeEntrySuggestion | None:
+        """Load a suggestion by id."""
+        row = self.conn.execute(
+            "SELECT * FROM time_entry_suggestions WHERE id = ?",
+            (suggestion_id,),
+        ).fetchone()
+        return self._row_to_suggestion(row) if row else None
+
+    def list_suggestions(
+        self,
+        user_id: str,
+        state: Optional[str] = None,
+    ) -> list[TimeEntrySuggestion]:
+        """List suggestions for a user, optionally filtered by state."""
+        if state:
+            rows = self.conn.execute(
+                "SELECT * FROM time_entry_suggestions WHERE user_id = ? AND state = ? ORDER BY start_time",
+                (user_id, state),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM time_entry_suggestions WHERE user_id = ? ORDER BY start_time",
+                (user_id,),
+            ).fetchall()
+        return [self._row_to_suggestion(r) for r in rows]
+
+    @staticmethod
+    def _row_to_suggestion(row: sqlite3.Row) -> TimeEntrySuggestion:
+        import json
+
+        return TimeEntrySuggestion(
+            id=row["id"],
+            user_id=row["user_id"],
+            company_id=row["company_id"],
+            project_id=row["project_id"],
+            start_time=row["start_time"],
+            end_time=row["end_time"],
+            suggested_minutes=row["suggested_minutes"],
+            confidence=row["confidence"],
+            evidence_ids=json.loads(row["evidence_ids"]) if row["evidence_ids"] else [],
+            state=row["state"],
+            edited_minutes=row["edited_minutes"],
+            edited_project_id=row["edited_project_id"],
+            review_notes=row["review_notes"],
+            submitted_by=row["submitted_by"],
+            submitted_at=row["submitted_at"],
+            reviewed_by=row["reviewed_by"],
+            reviewed_at=row["reviewed_at"],
+            time_entry_id=row["time_entry_id"],
+            created_at=row["created_at"],
+        )
 
     # ------------------------------------------------------------------
     # Authentication and session management

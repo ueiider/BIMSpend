@@ -38,6 +38,12 @@ from .project_correlation import (
     DocumentProjectMapping,
     CorrelationEvidence,
 )
+from .suggestion_engine import (
+    SuggestionEngine,
+    SuggestionConfig,
+    ActivityObservation,
+)
+from bimspend.models import TimeEntrySuggestion
 
 __all__ = [
     # Core capture
@@ -64,4 +70,9 @@ __all__ = [
     "CorrelationConfidence",
     "DocumentProjectMapping",
     "CorrelationEvidence",
+    # Suggestion engine
+    "SuggestionEngine",
+    "SuggestionConfig",
+    "ActivityObservation",
+    "TimeEntrySuggestion",
 ]

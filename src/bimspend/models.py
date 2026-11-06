@@ -36,6 +36,26 @@ class TimeEntryState(Enum):
     BILLED = "billed"
 
 
+class SuggestionState(Enum):
+    """Review state for a suggested time entry.
+
+    Suggestions are auto-generated from observed activity and must be
+    explicitly reviewed and submitted by a designer before becoming
+    billable time.
+
+    States:
+      pending_review  -> suggestion has not been reviewed by designer
+      submitted       -> designer submitted for manager approval
+      rejected        -> designer rejected the suggestion
+      merged          -> suggestion was merged into another suggestion
+    """
+
+    PENDING_REVIEW = "pending_review"
+    SUBMITTED = "submitted"
+    REJECTED = "rejected"
+    MERGED = "merged"
+
+
 @dataclass
 class Project:
     """A commercial project (identity layer, Miru-like)."""
@@ -288,6 +308,108 @@ class TeamMember:
     role: str
     loaded_cost_rate: float
     is_active: bool = True
+
+
+class SuggestionState(Enum):
+    """Review state for a suggested time entry.
+
+    Suggestions are auto-generated from observed activity and must be
+    explicitly reviewed and submitted by a designer before becoming
+    billable time.
+
+    States:
+      pending_review  -> suggestion has not been reviewed by designer
+      submitted       -> designer submitted for manager approval
+      rejected        -> designer rejected the suggestion
+      merged          -> suggestion was merged into another suggestion
+    """
+
+    PENDING_REVIEW = "pending_review"
+    SUBMITTED = "submitted"
+    REJECTED = "rejected"
+    MERGED = "merged"
+
+
+@dataclass
+class TimeEntrySuggestion:
+    """Auto-generated time entry suggestion from observed activity.
+
+    Created by the suggestion engine from correlation evidence and
+    activity events. A suggestion is NOT a time entry — it must be
+    explicitly reviewed and submitted by a designer before it becomes
+    billable time.
+
+    Designer may edit project, duration, and notes before submitting.
+    Submitted entries enter the existing review workflow
+    (pending_review -> submitted -> approved/rejected -> billed).
+    """
+
+    id: str
+    user_id: str
+    start_time: str  # ISO-8601 UTC
+    end_time: str  # ISO-8601 UTC
+    suggested_minutes: float  # observed active duration (excludes AFK/locked)
+    confidence: str  # CONFIRMED, HIGH, MEDIUM, LOW, UNASSIGNED
+    evidence_ids: list[str]  # activity_event ids that contributed
+    company_id: Optional[str] = None
+    project_id: Optional[str] = None  # None if UNASSIGNED
+    state: str = "pending_review"  # pending_review, submitted, rejected, merged
+    edited_minutes: Optional[float] = None  # designer override
+    edited_project_id: Optional[str] = None  # designer project override
+    review_notes: Optional[str] = None
+    submitted_by: Optional[str] = None
+    submitted_at: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    time_entry_id: Optional[str] = None  # linked TimeEntry if submitted
+    created_at: str = ""  # ISO-8601 UTC
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "company_id": self.company_id,
+            "project_id": self.project_id,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "suggested_minutes": self.suggested_minutes,
+            "confidence": self.confidence,
+            "evidence_ids": self.evidence_ids,
+            "state": self.state,
+            "edited_minutes": self.edited_minutes,
+            "edited_project_id": self.edited_project_id,
+            "review_notes": self.review_notes,
+            "submitted_by": self.submitted_by,
+            "submitted_at": self.submitted_at,
+            "reviewed_by": self.reviewed_by,
+            "reviewed_at": self.reviewed_at,
+            "time_entry_id": self.time_entry_id,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TimeEntrySuggestion":
+        return cls(
+            id=data["id"],
+            user_id=data["user_id"],
+            company_id=data.get("company_id"),
+            project_id=data.get("project_id"),
+            start_time=data["start_time"],
+            end_time=data["end_time"],
+            suggested_minutes=float(data["suggested_minutes"]),
+            confidence=data.get("confidence", "unassigned"),
+            evidence_ids=data.get("evidence_ids", []),
+            state=data.get("state", "pending_review"),
+            edited_minutes=data.get("edited_minutes"),
+            edited_project_id=data.get("edited_project_id"),
+            review_notes=data.get("review_notes"),
+            submitted_by=data.get("submitted_by"),
+            submitted_at=data.get("submitted_at"),
+            reviewed_by=data.get("reviewed_by"),
+            reviewed_at=data.get("reviewed_at"),
+            time_entry_id=data.get("time_entry_id"),
+            created_at=data.get("created_at", ""),
+        )
 
 
 @dataclass
