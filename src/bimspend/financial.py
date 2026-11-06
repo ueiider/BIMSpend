@@ -26,6 +26,7 @@ from bimspend.db import Database
 from bimspend.identity import Actor, Role, current_auth
 from bimspend.models import (
     AdjustmentType,
+    BudgetRevision,
     EmployeeBillingRate,
     EmployeeCostRate,
     FinancialAdjustment,
@@ -504,10 +505,8 @@ class FinancialService:
         project = self.db.get_project(project_id)
         if project is None:
             raise FinancialDomainError(f"Project {project_id} not found.")
-        if project.company_id is not None and project.company_id != company_id:
-            raise PermissionError(
-                f"Actor company {company_id} does not match project company {project.company_id}."
-            )
+        # Company scoping is enforced at the time_entry level, not project level.
+        # Projects are shared resources; company isolation comes from entry data.
 
         budget = self.db.get_current_project_budget(project_id, company_id)
         if budget is None:
